@@ -1,8 +1,13 @@
 # Learning Auto Player · 学习系统万能播放器
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tests](https://img.shields.io/badge/tests-20%2F20-green)](#测试)
+
 个人用的在线学习系统自动播放工具：自动续播、防暂停、播完自动切下一集、多门课自动遍历。按域名加载规则，内置录制向导，新平台无需改代码即可适配。
 
-> ⚠️ 仅供个人学习使用，使用前请确认符合所在公司/平台的使用规范。
+> A personal tool that auto-plays online-learning videos: anti-pause, auto-resume, auto-advance to the next lesson, and multi-course traversal. Domain-based rules with a built-in recording wizard — no code needed for new platforms.
+
+> ⚠️ 仅供个人学习使用，使用前请确认符合所在公司/平台的使用规范。仓库内置规则仅为 `example.com` 示例，不含任何真实平台信息。
 
 ## 功能
 
@@ -34,6 +39,8 @@
 | 🚀 自动遍历 | 一门课播完 → 返回列表 → 自动进下一门 |
 | ⏸ 关闭 | 完全停手 |
 
+> 💡 隐私提示：你自己的平台规则通过录制向导配置后，保存在浏览器 localStorage（`autoLearn.rule.<域名>`），只在本机生效，不会随代码上传。
+
 ## 配置新平台（录制向导）
 
 1. 控制台输入 `__autoLearn.wizard()` 打开面板
@@ -63,8 +70,13 @@ node playwright/auto-learn.js --domain <域名> [--rule <规则json>] [--limit 2
 ## 目录结构
 
 ```
-auto-learn.user.js      油猴脚本（规则驱动引擎，全部功能入口）
-rules-format.md         规则格式 + 命令参考
-playwright/auto-learn.js  Playwright 兜底工具
+LICENSE                  MIT 许可证
+auto-learn.user.js       油猴脚本（规则驱动引擎，全部功能入口）
+rules-format.md          规则格式 + 命令参考
+playwright/auto-learn.js Playwright 兜底工具
 test/harness.js          冒烟测试（node test/harness.js）
 ```
+
+## License
+
+[MIT](LICENSE) © yyliucha
