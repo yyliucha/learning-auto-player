@@ -51,6 +51,16 @@
 
 完整规则格式、控制台命令说明见 [rules-format.md](rules-format.md)。
 
+## 网址播放器（傻瓜式，真实平台适用）
+
+**双击 `playwright/start.bat` → 输入平台网址 → 真实浏览器打开 → 登录 → 全自动播放。**
+
+- 真实 Chromium + 真实鼠标点击（`isTrusted=true`）+ 随机移动反检测，视频真实播放、进度真实上报
+- 自动扫描建档（无需配置规则）：自动进课 → 播完自动关弹窗 → 自动切下一集 → 课程播完自动返回 → 下一门 → 全部完成
+- 首次运行请在弹出的浏览器里手动登录，登录态与完成记录持久化在 `playwright/.auth/`（已 gitignore）
+- 命令行等价方式：`node playwright/auto-learn.js --url <网址> [--rule <规则json>] [--limit 20]`
+- 本机已安装 `playwright` 依赖与 Chromium，双击即用
+
 ## 在线演示（本地）
 
 仓库自带一个**模拟学习平台**的演示页，无需真实账号即可体验全部功能（模拟了"切标签页暂停"、"评价弹窗"、"无自动连播入口"三个真实平台特征）：
@@ -77,13 +87,7 @@ node test/harness.js
 
 ## Playwright 兜底工具
 
-```bash
-npm install playwright
-npx playwright install chromium
-node playwright/auto-learn.js --domain <域名> [--rule <规则json>] [--limit 20]
-```
-
-真实 Chromium + 真实鼠标点击（`isTrusted=true`）+ 随机移动反检测，视频真实播放。规则与油猴脚本共用同一格式。首次运行手动登录，登录态与完成记录持久化在 `playwright/.auth/`（已加入 .gitignore）。
+见上方"网址播放器"：`double-click playwright/start.bat` 或 `node playwright/auto-learn.js --url <网址>`。规则与油猴脚本共用同一格式（`--rule` 传 JSON 文件即可）。
 
 ## 目录结构
 
@@ -91,7 +95,8 @@ node playwright/auto-learn.js --domain <域名> [--rule <规则json>] [--limit 2
 LICENSE                  MIT 许可证
 auto-learn.user.js       油猴脚本（规则驱动引擎，全部功能入口）
 rules-format.md          规则格式 + 命令参考
-playwright/auto-learn.js Playwright 兜底工具
+playwright/auto-learn.js 网址播放器（真实浏览器，输入网址即用）
+playwright/start.bat     傻瓜启动器（双击 → 输入网址）
 test/harness.js          冒烟测试（node test/harness.js）
 demo/                    本地演示平台（模拟真实平台特征）
 ```

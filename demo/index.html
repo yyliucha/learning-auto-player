@@ -232,13 +232,14 @@ function loadDemoRule() {
   });
   alert(res);
 }
-document.getElementById('demo-rule-btn').addEventListener('click', loadDemoRule);
+/* 手动配置规则函数保留备用（按钮已从页面移除），主流程由自动注入驱动 */
 
-/* 一键进入自动遍历模式 */
-document.getElementById('traverse-btn').addEventListener('click', () => {
-  if (!window.__autoLearn) { alert('未检测到脚本：请先把 v1.6 脚本粘贴到 F12 控制台（或确认 Tampermonkey 已更新）'); return; }
-  alert(window.__autoLearn.setMode('traverse'));
-});
+/* 一键进入自动遍历模式（备用按钮，主流程已自动开始） */
+function enterTraverse() {
+  if (!window.__autoLearn) return '未检测到脚本';
+  return window.__autoLearn.setMode('traverse');
+}
+void enterTraverse;
 
 /* 实时状态条：随时查看脚本的规则/模式/动作（列表页徽标尚未出现时也能看） */
 setInterval(() => {
@@ -256,6 +257,10 @@ setInterval(() => {
 /* 傻瓜式自动注入：页面加载后自动加载本仓库的 auto-learn.user.js 并自动开始遍历 */
 (async function autoInject() {
   const statusEl = document.getElementById('demo-status');
+  if (location.search.indexOf('noauto') !== -1) {   // ?noauto=1 调试模式：不自动注入
+    statusEl.textContent = '自动注入已禁用（?noauto=1 调试模式）';
+    return;
+  }
   const sources = ['../auto-learn.user.js', 'auto-learn.user.js'];
   let loaded = false;
   for (const src of sources) {

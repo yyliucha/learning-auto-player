@@ -1,29 +1,24 @@
 #!/usr/bin/env node
 /* ============================================================
- * 学习系统自动播放 —— Playwright 兜底工具（Phase 4）
+ * 学习系统自动播放 —— 网址播放器（真实浏览器 + 真实视频播放）
  * ------------------------------------------------------------
- * 用途：对付油猴脚本搞不定的平台（isTrusted 校验、后端心跳、复杂流程）。
- * 原理：真实 Chromium + 真实鼠标点击（isTrusted=true）+ 随机移动防检测，
- *       视频真实播放、进度真实上报，基本无法从行为上识别。
+ * 傻瓜式用法：
+ *   双击同目录的 start.bat，输入学习平台网址，其余全自动：
+ *   打开真实浏览器 → 等你手动登录 → 自动扫描建档（无需配置规则）
+ *   → 自动进课 → 真实播放（防暂停 + 自动切下一集 + 关弹窗）
+ *   → 课程播完自动返回 → 下一门 → 全部完成
  *
- * 用法：
- *   node playwright/auto-learn.js --domain example.com [选项]
- * 选项：
- *   --url <起始页>     默认 https://<域名>
- *   --rule <规则json>  规则文件（与油猴脚本同一套格式）
- *   --limit <N>        本轮最多进出几门课，默认 20
- *   --headless         无头模式（调试用，正式跑建议默认有头）
+ * 命令行用法：
+ *   node auto-learn.js --url <平台网址> [--rule <规则json>] [--limit 20] [--headless]
  *
- * 首次运行：请在弹出的浏览器里手动登录，登录完成后脚本自动继续。
- * 登录态存 .auth/<域名>.json，下次免登录；完成记录存 .auth/<域名>.done.json。
- *
- * 安装：
- *   npm install playwright
- *   npx playwright install chromium
+ * 原理：真实 Chromium + 真实鼠标点击（isTrusted=true）+ 随机移动反检测，
+ *       视频真实播放、进度真实上报，行为上与真人操作一致。
+ * 首次运行弹出浏览器后请手动登录，登录态存 .auth/<域名>.json 下次复用。
  * ============================================================ */
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const readline = require('readline');
 
 function arg(name, def) {
   const i = process.argv.indexOf('--' + name);
@@ -31,20 +26,13 @@ function arg(name, def) {
 }
 const hasArg = name => process.argv.includes('--' + name);
 
-const domain = arg('domain', '');
-if (!domain) {
-  console.error('用法：node playwright/auto-learn.js --domain <域名> [--url <起始页>] [--rule <规则json>] [--limit 20]');
-  process.exit(1);
-}
-
 let pw;
 try { pw = require('playwright'); } catch (e) {
-  console.error('未安装 playwright，先执行：\n  npm install playwright\n  npx playwright install chromium');
+  console.error('未安装 playwright，请先执行：\n  npm install playwright\n  npx playwright install chromium');
   process.exit(1);
 }
 
-/* ---------------- 内置规则（与油猴脚本共用格式） ---------------- */
-/* 示例规则（example.com）仅供参考：改成你自己的域名，或用 --rule 传规则文件 */
+/* ---------------- 内置规则（与油猴脚本共用格式，示例） ---------------- */
 const BUILTIN = {
   'example.com': {
     name: '示例学习平台',
@@ -59,34 +47,34 @@ const BUILTIN = {
       dialogs: [{ dismissTexts: ['取消', '关闭'] }],
       completion: { stallSeconds: 24 }
     },
-    courseListPage: null   // 课程项选择器待配置（用 --rule 提供完整规则）
+    courseListPage: null
   }
 };
 
-function loadRule() {
-  const file = arg('rule', '');
-  if (file) return JSON.parse(fs.readFileSync(file, 'utf8'));
-  return BUILTIN[domain] || null;
-}
-const RULE = loadRule();
-if (!RULE) {
-  console.error('没有 ' + domain + ' 的规则：请用 --rule <规则json> 提供（格式同油猴脚本规则）');
-  process.exit(1);
-}
-
 /* ---------------- 存储 ---------------- */
 const AUTH_DIR = path.join(__dirname, '.auth');
-const authFile = path.join(AUTH_DIR, domain + '.json');
-const doneFile = path.join(AUTH_DIR, domain + '.done.json');
+const authFile = domain => path.join(AUTH_DIR, domain + '.json');
+const doneFile = domain => path.join(AUTH_DIR, domain + '.done.json');
+const draftFile = domain => path.join(AUTH_DIR, domain + '.draft.json');
+
 function loadJSON(f, def) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return def; } }
 function saveJSON(f, obj) { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(obj, null, 2)); }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function promptUrl() {
+  return new Promise(resolve => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question('请输入学习平台网址（如 https://xxx.com）: ', ans => { rl.close(); resolve(ans.trim()); });
+  });
+}
 
 /* ---------------- 页面操作（全部真实鼠标点击） ---------------- */
 async function videoState(page, sel) {
   return page.evaluate(s => {
     const v = document.querySelector(s);
     if (!v) return null;
+    const r = v.getBoundingClientRect();   // 忽略隐藏/不可见的视频元素
+    if (r.width < 2 || r.height < 2) return null;
     return { ended: v.ended, paused: v.paused, time: isFinite(v.currentTime) ? v.currentTime : -1 };
   }, sel);
 }
@@ -131,18 +119,24 @@ async function clickText(page, texts) {
   if (!texts || !texts.length) return false;
   const pt = await page.evaluate(txts => {
     const all = document.querySelectorAll('button, a, [role="button"], div, span, li');
+    const matches = [];
     for (const el of all) {
       const t = (el.innerText || el.textContent || '').trim();
       if (!t || t.length > 12) continue;
       if (txts.some(x => t.includes(x))) {
         const r = el.getBoundingClientRect();
-        if (r.width >= 2 && r.height >= 2) {
-          el.scrollIntoView({ block: 'center' });
-          return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-        }
+        if (r.width >= 2 && r.height >= 2) matches.push(el);
       }
     }
-    return null;
+    if (!matches.length) return null;
+    // 优先真实按钮/链接（避免点中外层容器），否则用可见元素
+    const clickables = matches.filter(el =>
+      el.tagName === 'BUTTON' || el.tagName === 'A' || el.getAttribute('role') === 'button'
+    );
+    const el = (clickables.length ? clickables : matches)[0];
+    const r = el.getBoundingClientRect();
+    el.scrollIntoView({ block: 'center' });
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }, texts);
   if (!pt) return false;
   await sleep(150);
@@ -156,18 +150,23 @@ async function clickInside(page, parentSel, texts) {
     const parent = document.querySelector(parentSel);
     if (!parent) return null;
     const all = parent.querySelectorAll('button, a, [role="button"], span, div');
+    const matches = [];
     for (const el of all) {
       const t = (el.innerText || el.textContent || '').trim();
       if (!t || t.length > 12) continue;
       if (texts.some(x => t.includes(x))) {
         const r = el.getBoundingClientRect();
-        if (r.width >= 2 && r.height >= 2) {
-          el.scrollIntoView({ block: 'center' });
-          return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-        }
+        if (r.width >= 2 && r.height >= 2) matches.push(el);
       }
     }
-    return null;
+    if (!matches.length) return null;
+    const clickables = matches.filter(el =>
+      el.tagName === 'BUTTON' || el.tagName === 'A' || el.getAttribute('role') === 'button'
+    );
+    const el = (clickables.length ? clickables : matches)[0];
+    const r = el.getBoundingClientRect();
+    el.scrollIntoView({ block: 'center' });
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }, { parentSel, texts });
   if (!pt) return false;
   await sleep(150);
@@ -193,6 +192,30 @@ async function nextChapterPoint(page, rule) {
   }, n);
 }
 
+/* 排空收尾弹窗：弹窗可能延迟出现，等待后多轮关闭直至点不到为止 */
+async function dismissDialogs(page, vp) {
+  if (!vp || !vp.dialogs || !vp.dialogs.length) return;
+  await sleep(1200);   // 给弹窗时间出现
+  for (let round = 0; round < 4; round++) {
+    let closedAny = false;
+    for (const d of vp.dialogs) {
+      if (d.selector && await clickSelector(page, d.selector)) { closedAny = true; await sleep(300); }
+      if (d.dismissTexts && d.dismissTexts.length && await clickText(page, d.dismissTexts)) { closedAny = true; await sleep(300); }
+    }
+    if (!closedAny) break;
+  }
+}
+
+/* 验证"下一集"真的切换：新视频在播且时间戳与旧视频明显不同（最多 20 秒） */
+async function waitSwitch(page, sel, prevTime) {
+  for (let i = 0; i < 10; i++) {
+    const st = await videoState(page, sel);
+    if (st && !st.ended && st.time >= 0 && (prevTime < 0 || Math.abs(st.time - prevTime) > 1)) return true;
+    await sleep(1500);
+  }
+  return false;
+}
+
 /* 等视频播完：ended 事件，或时间戳连续 stall 秒不动 */
 async function waitVideoEnd(page, sel, stallSeconds) {
   let lastTime = -1, stall = 0;
@@ -215,13 +238,130 @@ async function waitVideoEnd(page, sel, stallSeconds) {
   }
 }
 
-/* 等登录完成：页面出现视频或课程列表即算 */
-async function waitLoggedIn(page, videoSel, courseSel) {
+/* 页面是否有"内容信号"：视频 or 列表候选（用于登录判断） */
+async function pageHasSignal(page) {
+  return page.evaluate(() => {
+    const vs = document.querySelectorAll('video');
+    for (const v of vs) {
+      const r = v.getBoundingClientRect();
+      if (r.width >= 2 && r.height >= 2) return true;   // 只看可见视频
+    }
+    let found = false;
+    document.querySelectorAll('div, ul, ol, section').forEach(p => {
+      if (found || !p.children || p.children.length < 3 || p.children.length > 80) return;
+      const sigs = {};
+      for (const c of p.children) {
+        if (c.tagName === 'VIDEO') continue;
+        const cls = (typeof c.className === 'string' ? c.className : '').trim().split(/\s+/).filter(x => x && !/^(active|selected|current|hover|focus|open|show|hidden|is-|vjs-|el-)/.test(x)).slice(0, 2).join('.');
+        if (!cls) continue;
+        const sig = c.tagName.toLowerCase() + '.' + cls;
+        sigs[sig] = (sigs[sig] || 0) + 1;
+      }
+      const top = Object.entries(sigs).sort((a, b) => b[1] - a[1])[0];
+      if (top && top[1] >= 3) found = true;
+    });
+    return found;
+  });
+}
+
+/* 自动扫描建档（与油猴脚本同启发式） */
+async function draftRule(page) {
+  const det = await page.evaluate(() => {
+    const out = { chapter: null, course: null };
+    const KEY_COURSE = /course|subject|class|homework|book/i;
+    const KEY_CHAPTER = /chapter|lesson|item|wrapper|section|unit|video|module|info/i;
+    const BAD = /menu|nav|crumb|pagi|tabs|swiper|crumbs|toolbar|topbar|header|footer/i;
+    const STATE = /^(active|selected|current|hover|focus|open|show|hidden|is-|vjs-|el-)/;
+    const qs = s => { try { return Array.from(document.querySelectorAll(s)); } catch (e) { return []; } };
+    const detectActive = s => {
+      const els = qs(s);
+      if (els.length < 2) return null;
+      const counts = {};
+      for (const el of els) for (const c of el.classList) counts[c] = (counts[c] || 0) + 1;
+      return Object.keys(counts).find(c => counts[c] === 1 && /active|current|playing|selected|chosen|on|focus/i.test(c)) || null;
+    };
+    const detectSkip = s => {
+      const els = qs(s);
+      const total = els.length;
+      if (total < 3) return '';
+      const counts = {};
+      for (const el of els) for (const c of el.classList) counts[c] = (counts[c] || 0) + 1;
+      return Object.keys(counts).find(c => counts[c] > 1 && counts[c] < total &&
+        !/active|current|playing|selected|chosen|on|focus|hover|open|show|hidden/i.test(c) &&
+        !/^vjs-/.test(c) && !/^el-/.test(c)) || '';
+    };
+    document.querySelectorAll('div, ul, ol, section').forEach(p => {
+      if (!p.children || p.children.length < 3 || p.children.length > 80) return;
+      const sigs = {};
+      for (const c of p.children) {
+        if (c.tagName === 'VIDEO') continue;
+        const cls = (typeof c.className === 'string' ? c.className : '').trim().split(/\s+/)
+          .filter(x => x && !STATE.test(x)).slice(0, 2).join('.');
+        if (!cls) continue;
+        const sig = c.tagName.toLowerCase() + '.' + cls;
+        sigs[sig] = (sigs[sig] || 0) + 1;
+      }
+      let top = null;
+      for (const k of Object.keys(sigs)) if (!top || sigs[k] > top[1]) top = [k, sigs[k]];
+      if (!top || top[1] < 3 || BAD.test(top[0])) return;
+      if (KEY_COURSE.test(top[0]) && !out.course) {
+        out.course = { selector: top[0], activeClass: detectActive(top[0]) || 'active', skipClass: detectSkip(top[0]) };
+      } else if (!KEY_COURSE.test(top[0]) && KEY_CHAPTER.test(top[0]) && !out.chapter) {
+        out.chapter = { selector: top[0], activeClass: detectActive(top[0]) || 'active', skipClass: detectSkip(top[0]) };
+      }
+    });
+    return out;
+  });
+  if (!det.chapter && !det.course) return null;
+  const rule = {
+    name: '自动建档',
+    videoPage: {
+      videoSelector: 'video',
+      next: {
+        strategy: 'button',
+        listSelector: '',
+        activeClass: 'active',
+        skipClass: '',
+        nameSelector: '',
+        texts: ['下一课', '下节课', '下一节', '继续学习', '继续播放', '播放下一', '进入下一', '开始学习'],
+        selector: ''
+      },
+      fallbackTexts: [],
+      dialogs: [{ selector: '', dismissTexts: ['取消', '关闭'] }],
+      completion: { stallSeconds: 24 }
+    },
+    courseListPage: null
+  };
+  if (det.chapter) {
+    rule.videoPage.next = {
+      strategy: 'chapter-list',
+      listSelector: det.chapter.selector,
+      activeClass: det.chapter.activeClass || 'active',
+      skipClass: det.chapter.skipClass || '',
+      nameSelector: '',
+      texts: [],
+      selector: ''
+    };
+  }
+  if (det.course) {
+    rule.courseListPage = {
+      courseItemSelector: det.course.selector,
+      nameSelector: '',
+      enterTexts: [],
+      doneSelector: '',
+      doneTexts: ['已完成'],
+      backSelector: '',
+      backTexts: ['返回', '返回列表'],
+      maxCoursesPerSession: 20
+    };
+  }
+  return rule;
+}
+
+/* 等登录完成：页面出现视频或列表结构即认为已登录 */
+async function waitLoggedIn(page) {
   for (let i = 0; i < 240; i++) {   // 最多 20 分钟
-    const ok = await page.evaluate(({ videoSel, courseSel }) =>
-      !!document.querySelector(videoSel) || (courseSel && !!document.querySelector(courseSel)),
-      { videoSel, courseSel });
-    if (ok) return;
+    if (await pageHasSignal(page)) return;
     await sleep(5000);
   }
   throw new Error('等待登录超时（20 分钟）');
@@ -231,28 +371,42 @@ async function waitLoggedIn(page, videoSel, courseSel) {
 async function main() {
   const headless = hasArg('headless');
   const limit = parseInt(arg('limit', '20'), 10) || 20;
-  const startUrl = arg('url', 'https://' + domain);
-  const vp = RULE.videoPage || {};
-  const videoSel = vp.videoSelector || 'video';
-  const lp = RULE.courseListPage || null;
-  const courseSel = lp && lp.courseItemSelector ? lp.courseItemSelector : '';
+  let startUrl = arg('url', '');
+  if (!startUrl) {
+    const domain = arg('domain', '');
+    startUrl = domain ? ('https://' + domain) : (await promptUrl());
+  }
+  if (!/^https?:\/\//.test(startUrl)) startUrl = 'https://' + startUrl;
+  const host = startUrl.replace(/^https?:\/\//, '').split(/[/:]/)[0];
+
+  /* 规则：--rule 文件 > 内置 > 历史自动建档 > 现场扫描建档 */
+  let RULE = null;
+  const ruleFile = arg('rule', '');
+  if (ruleFile) {
+    RULE = JSON.parse(fs.readFileSync(ruleFile, 'utf8'));
+  } else if (BUILTIN[host]) {
+    RULE = BUILTIN[host];
+  } else {
+    RULE = loadJSON(draftFile(host), null);
+  }
 
   const browser = await pw.chromium.launch({
     headless,
     args: ['--disable-blink-features=AutomationControlled', '--start-maximized']
   });
-  const storageState = loadJSON(authFile, null);
+  const storageState = loadJSON(authFile(host), null);
   const context = await browser.newContext(storageState ? { storageState } : { viewport: null });
   const page = await context.newPage();
-  const doneSet = new Set(loadJSON(doneFile, []));
+  const doneSet = new Set(loadJSON(doneFile(host), []));
 
+  console.log('[auto-learn] 打开 ' + startUrl + ' …');
   await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  console.log('[auto-learn] 请确认浏览器里已登录（首次运行请手动登录，完成后自动继续）…');
-  await waitLoggedIn(page, videoSel, courseSel);
-  await context.storageState({ path: authFile });
-  console.log('[auto-learn] 登录态已保存：' + authFile);
+  console.log('[auto-learn] 请在浏览器里完成登录（首次运行需手动登录，登录完成会自动继续）…');
+  await waitLoggedIn(page);
+  await context.storageState({ path: authFile(host) });
+  console.log('[auto-learn] 登录态已保存：' + authFile(host));
 
-  // 反空闲：随机移动鼠标 + 保持窗口前台
+  /* 反空闲：随机移动鼠标 + 保持窗口前台 */
   let stopAntiIdle = false;
   const antiIdle = (async () => {
     while (!stopAntiIdle) {
@@ -267,14 +421,34 @@ async function main() {
 
   let entered = 0;
   let courseName = null;
+  let draftTry = 0;
 
   while (entered < limit) {
+    /* 没有规则 → 现场扫描建档（最多重试 12 次 = 60 秒） */
+    if (!RULE) {
+      draftTry++;
+      RULE = await draftRule(page);
+      if (RULE) {
+        saveJSON(draftFile(host), RULE);
+        console.log('[auto-learn] 已自动建档：' + JSON.stringify(RULE).slice(0, 200) + '…');
+      } else if (draftTry >= 12) {
+        console.log('[auto-learn] 扫描 60 秒仍未识别页面结构，请确认页面已加载完整，或改用 --rule 提供规则。');
+        break;
+      } else {
+        await sleep(5000);
+        continue;
+      }
+    }
+
+    const vp = RULE.videoPage || { videoSelector: 'video' };
+    const videoSel = vp.videoSelector || 'video';
     const st = await videoState(page, videoSel);
 
     if (!st) {
       /* 列表页 → 找下一门未完成课程 */
-      if (!lp || !courseSel) {
-        console.log('[auto-learn] 当前无视频且没有课程列表规则，结束。');
+      const lp = RULE.courseListPage;
+      if (!lp || !lp.courseItemSelector) {
+        console.log('[auto-learn] 当前无视频且没有课程列表规则，结束。若这是课程列表页，请把页面结构发我。');
         break;
       }
       const course = await page.evaluate(cfg => {
@@ -292,14 +466,13 @@ async function main() {
           return { x: r.left + r.width / 2, y: r.top + r.height / 2, name };
         }
         return null;
-      }, { courseItemSelector: courseSel, doneSelector: lp.doneSelector || '', doneTexts: lp.doneTexts || [], nameSelector: lp.nameSelector || '', doneNames: Array.from(doneSet) });
+      }, { courseItemSelector: lp.courseItemSelector, doneSelector: lp.doneSelector || '', doneTexts: lp.doneTexts || [], nameSelector: lp.nameSelector || '', doneNames: Array.from(doneSet) });
 
       if (!course) {
         console.log('[auto-learn] 没有未完成的课程了 🎉');
         break;
       }
-      // 优先点课程项上的入口按钮（如"开始学习"），否则点课程项本身
-      const clickedEnter = await clickInside(page, courseSel, lp.enterTexts || []);
+      const clickedEnter = await clickInside(page, lp.courseItemSelector, lp.enterTexts || []);
       if (!clickedEnter) {
         await page.mouse.move(course.x, course.y, { steps: 6 });
         await page.mouse.click(course.x, course.y);
@@ -317,27 +490,38 @@ async function main() {
     const why = await waitVideoEnd(page, videoSel, (vp.completion && vp.completion.stallSeconds) || 24);
     console.log('[auto-learn] 本集结束：' + why);
 
-    // 关收尾弹窗
-    for (const d of (vp.dialogs || [])) {
-      if (d.selector) await clickSelector(page, d.selector);
-      if (d.dismissTexts && d.dismissTexts.length) await clickText(page, d.dismissTexts);
-      await sleep(500);
-    }
+    // 排空收尾弹窗（弹窗延迟出现时多轮关闭，避免遮挡后续点击）
+    await dismissDialogs(page, vp);
 
-    // 点下一章
+    // 点下一章：章节列表 → 文字按钮，然后验证是否真的切换
+    const prevTime = st.time;
     const next = await nextChapterPoint(page, RULE);
     if (next) {
       await page.mouse.move(next.x, next.y, { steps: 6 });
       await page.mouse.click(next.x, next.y);
       console.log('[auto-learn] 已点击下一章：「' + next.text + '」');
-      await sleep(5000);
+    } else {
+      const nextBtn = (RULE.videoPage.next && RULE.videoPage.next.texts) || [];
+      if (await clickText(page, nextBtn)) {
+        console.log('[auto-learn] 已点击"下一课"按钮');
+      } else {
+        console.log('[auto-learn] 没有可点的下一项…');
+      }
+    }
+    const switched = await waitSwitch(page, videoSel, prevTime);
+    if (switched) {
+      console.log('[auto-learn] 已确认切换到新视频 ✓');
+      await sleep(2000);
       continue;
     }
+    console.log('[auto-learn] 未切换新视频（疑似本课程最后一集）');
 
     // 没有下一章 → 本课程播完 → 返回列表
-    if (courseName) { doneSet.add(courseName); saveJSON(doneFile, Array.from(doneSet)); }
+    await dismissDialogs(page, vp);   // 返回前同样排干弹窗（可能又弹出）
+    if (courseName) { doneSet.add(courseName); saveJSON(doneFile(host), Array.from(doneSet)); }
     console.log('[auto-learn] 课程「' + courseName + '」完成 ✅');
     courseName = null;
+    const lp = RULE.courseListPage;
     if (!lp) { console.log('[auto-learn] 没有课程列表规则，到此为止。'); break; }
     let back = lp.backSelector ? await clickSelector(page, lp.backSelector) : false;
     if (!back) back = await clickText(page, lp.backTexts || ['返回']);
