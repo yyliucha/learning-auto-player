@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>演示平台 · Learning Auto Player Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font: 14px/1.7 "Microsoft YaHei", sans-serif; background: #0f192b; color: #cfd8e3; min-height: 100vh; padding: 24px; }
+  h1 { font-size: 20px; margin-bottom: 16px; color: #7fd4ff; }
+  .help { margin-top: 24px; background: #16273c; border: 1px solid #2c4a63; border-radius: 8px; padding: 14px 16px; font-size: 13px; }
+  .help ol { padding-left: 20px; margin: 6px 0; }
+  .help code { background: #0b1420; padding: 1px 6px; border-radius: 4px; color: #ffd76e; }
+  .btn { background: #1d6f42; color: #eafff1; border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer; font-size: 14px; margin: 8px 8px 0 0; }
+  .btn:hover { filter: brightness(1.15); }
+
+  /* 课程列表 */
+  #course-list { display: flex; flex-wrap: wrap; gap: 16px; }
+  .course-card { width: 240px; background: #16273c; border: 1px solid #2c4a63; border-radius: 10px; padding: 16px; cursor: pointer; position: relative; transition: border-color .15s; }
+  .course-card:hover { border-color: #7fd4ff; }
+  .course-name { font-size: 15px; font-weight: bold; }
+  .course-desc { color: #9fb6c9; font-size: 12px; margin-top: 6px; }
+  .done-badge { position: absolute; top: 10px; right: 10px; background: #1d6f42; color: #eafff1; font-size: 11px; padding: 1px 8px; border-radius: 10px; }
+
+  /* 播放屏 */
+  #player-screen { display: none; }
+  .top-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .back-btn { background: #37475b; color: #cfd8e3; border: 0; border-radius: 6px; padding: 6px 14px; cursor: pointer; }
+  .layout { display: flex; gap: 14px; }
+  .sidebar { width: 240px; background: #16273c; border: 1px solid #2c4a63; border-radius: 10px; padding: 10px; }
+  .item-wrapper { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; gap: 8px; }
+  .item-wrapper:hover { background: #1d2c42; }
+  .item-wrapper.active { background: #1d4f74; color: #7fd4ff; }
+  .chapter-number { color: #9fb6c9; }
+  .player-box { flex: 1; }
+  video { width: 100%; max-width: 720px; border-radius: 10px; background: #000; display: block; }
+  .next-btn { margin-top: 10px; background: #37475b; color: #cfd8e3; border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer; }
+
+  /* 评价弹窗（模拟"课程评价"收尾弹窗） */
+  #eval-dialog { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; z-index: 100; }
+  .el-dialog { background: #16273c; border: 1px solid #2c4a63; border-radius: 10px; padding: 20px 24px; min-width: 320px; text-align: center; }
+  .el-dialog__header { font-size: 16px; margin-bottom: 16px; color: #7fd4ff; }
+  .el-dialog__footer button { margin: 0 8px; background: #37475b; color: #cfd8e3; border: 0; border-radius: 6px; padding: 7px 18px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<!-- ============ 课程列表屏 ============ -->
+<div id="list-screen">
+  <h1>📚 我的学习（演示平台）</h1>
+  <div id="course-list">
+    <div class="course-card" data-course="A">
+      <div class="course-name">演示课程 A</div>
+      <div class="course-desc">3 个小节 · 每节约 5 秒</div>
+    </div>
+    <div class="course-card" data-course="B">
+      <div class="course-name">演示课程 B</div>
+      <div class="course-desc">2 个小节 · 每节约 10 秒</div>
+    </div>
+    <div class="course-card" data-course="C">
+      <div class="course-name">演示课程 C</div>
+      <div class="course-desc">已学完的课程（脚本会自动跳过）</div>
+      <div class="done-badge">已完成</div>
+    </div>
+  </div>
+  <div class="help">
+    <b>演示步骤：</b>
+    <ol>
+      <li>把 <code>auto-learn.user.js</code> 粘贴到 F12 控制台回车（或 Tampermonkey 已启用自动注入）</li>
+      <li>点右侧按钮 👉 <button class="btn" id="demo-rule-btn">一键配置演示规则</button></li>
+      <li>点击右下角徽标，切到 <b>🚀 自动遍历</b> 模式（蓝青色徽标）</li>
+      <li>坐等观察：自动进课 → 播完自动关"课程评价"弹窗 → 自动点下一章节 → 课程播完自动返回列表 → 进下一门 → 全部完成 🎉</li>
+      <li>播放中切到别的标签页 10 秒再回来：视频没被暂停（防暂停）</li>
+    </ol>
+    <div style="color:#9fb6c9;">本页模拟了真实平台的三个特征：切标签页暂停视频（visibilitychange）、每集结束弹"课程评价"、无下一集自动连播入口。</div>
+  </div>
+</div>
+
+<!-- ============ 播放屏 ============ -->
+<div id="player-screen">
+  <div class="top-bar">
+    <button class="back-btn" id="back-btn">← 返回</button>
+    <span id="course-title" style="font-size:16px;color:#7fd4ff;"></span>
+  </div>
+  <div class="layout">
+    <div class="sidebar" id="chapter-sidebar"></div>
+    <div class="player-box">
+      <video id="v" controls playsinline></video>
+      <button class="next-btn" id="next-btn">下一课 ▸</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 课程评价弹窗 ============ -->
+<div id="eval-dialog">
+  <div class="el-dialog">
+    <div class="el-dialog__header">课程评价</div>
+    <div class="el-dialog__footer">
+      <button id="eval-cancel">取消</button>
+      <button id="eval-submit">提交评价</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const COURSES = {
+  A: { title: '演示课程 A', chapters: ['第一节', '第二节', '第三节'] },
+  B: { title: '演示课程 B', chapters: ['第一节', '第二节'] },
+  C: { title: '演示课程 C', chapters: ['第一节'] }
+};
+const VIDEOS = [
+  'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+  'https://www.w3schools.com/html/mov_bbb.mp4'
+];
+let currentCourse = null;
+let currentChapter = 0;
+let endedSet = new Set();
+const v = document.getElementById('v');
+v.muted = true;
+
+function showScreen(name) {
+  document.getElementById('list-screen').style.display = name === 'list' ? 'block' : 'none';
+  document.getElementById('player-screen').style.display = name === 'player' ? 'block' : 'none';
+}
+
+function buildSidebar() {
+  const sb = document.getElementById('chapter-sidebar');
+  sb.innerHTML = '';
+  const prefix = currentCourse === 'A' ? '1.' : currentCourse === 'B' ? '2.' : '3.';
+  COURSES[currentCourse].chapters.forEach((name, i) => {
+    const item = document.createElement('div');
+    item.className = 'chapter-item level-2';
+    const wrap = document.createElement('div');
+    wrap.className = 'item-wrapper' + (i === currentChapter ? ' active' : '');
+    wrap.innerHTML =
+      '<span class="chapter-number">' + prefix + (i + 1) + '</span>' +
+      '<span class="chapter-name">' + name + '</span>';
+    wrap.addEventListener('click', () => switchChapter(i));
+    item.appendChild(wrap);
+    sb.appendChild(item);
+  });
+}
+
+function loadVideo() {
+  v.src = VIDEOS[(currentChapter + (currentCourse === 'B' ? 1 : 0)) % VIDEOS.length];
+  v.load();
+  v.play().catch(() => {});
+}
+
+function switchChapter(i) {
+  currentChapter = i;
+  const wraps = document.querySelectorAll('.item-wrapper');
+  wraps.forEach(el => el.classList.remove('active'));
+  wraps[i].classList.add('active');
+  loadVideo();
+}
+
+function enterCourse(key) {
+  currentCourse = key;
+  currentChapter = 0;
+  endedSet = new Set();
+  document.getElementById('course-title').textContent = COURSES[key].title;
+  buildSidebar();
+  loadVideo();
+  showScreen('player');
+}
+
+document.querySelectorAll('.course-card').forEach(card => {
+  card.addEventListener('click', () => enterCourse(card.getAttribute('data-course')));
+});
+
+document.getElementById('next-btn').addEventListener('click', () => {
+  if (currentChapter < COURSES[currentCourse].chapters.length - 1) switchChapter(currentChapter + 1);
+});
+
+document.getElementById('back-btn').addEventListener('click', () => {
+  if (currentCourse && endedSet.size === COURSES[currentCourse].chapters.length) {
+    const card = document.querySelector('.course-card[data-course="' + currentCourse + '"]');
+    if (card && !card.querySelector('.done-badge')) {
+      const b = document.createElement('div');
+      b.className = 'done-badge';
+      b.textContent = '已完成';
+      card.appendChild(b);
+    }
+  }
+  showScreen('list');
+});
+
+v.addEventListener('ended', () => {
+  endedSet.add(currentChapter);
+  setTimeout(() => { document.getElementById('eval-dialog').style.display = 'flex'; }, 600);
+});
+document.getElementById('eval-cancel').addEventListener('click', () => {
+  document.getElementById('eval-dialog').style.display = 'none';
+});
+document.getElementById('eval-submit').addEventListener('click', () => {
+  document.getElementById('eval-dialog').style.display = 'none';
+});
+
+/* 模拟真实平台的"切标签页暂停"检测：脚本会吞掉此监听（Tampermonkey）
+   或靠自动续播拉回来（控制台粘贴） */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && v && !v.paused) v.pause();
+});
+
+/* 一键配置演示规则（存 localStorage，只在本机生效） */
+function loadDemoRule() {
+  if (!window.__autoLearn) {
+    alert('未检测到脚本：请先在 F12 控制台粘贴 auto-learn.user.js（或确认 Tampermonkey 已启用）');
+    return;
+  }
+  const res = __autoLearn.saveRule({
+    name: '演示平台',
+    videoPage: {
+      videoSelector: 'video',
+      next: { strategy: 'chapter-list', listSelector: '.chapter-item .item-wrapper', activeClass: 'active', skipClass: 'no-video', nameSelector: '.chapter-name', texts: [] },
+      fallbackTexts: ['下一课', '下一节', '继续学习'],
+      dialogs: [{ selector: '', dismissTexts: ['取消', '关闭'] }],
+      completion: { stallSeconds: 12 }
+    },
+    courseListPage: {
+      courseItemSelector: '.course-card',
+      nameSelector: '.course-name',
+      enterTexts: [],
+      doneSelector: '',
+      doneTexts: ['已完成'],
+      backSelector: '.back-btn',
+      backTexts: ['返回'],
+      maxCoursesPerSession: 10
+    }
+  });
+  alert(res);
+}
+document.getElementById('demo-rule-btn').addEventListener('click', loadDemoRule);
+</script>
+</body>
+</html>

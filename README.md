@@ -49,6 +49,22 @@
 
 完整规则格式、控制台命令说明见 [rules-format.md](rules-format.md)。
 
+## 在线演示（本地）
+
+仓库自带一个**模拟学习平台**的演示页，无需真实账号即可体验全部功能（模拟了"切标签页暂停"、"评价弹窗"、"无自动连播入口"三个真实平台特征）：
+
+```bash
+cd demo
+python -m http.server 8000     # 或 npx http-server
+```
+
+打开 http://localhost:8000 ，然后：
+1. 粘贴 `auto-learn.user.js` 到 F12 控制台（或 Tampermonkey 自动注入）
+2. 点页面上的【一键配置演示规则】
+3. 点击右下角徽标切到 **🚀 自动遍历**
+
+即可看到：自动进课 → 播完自动关弹窗 → 自动切下一章节 → 课程播完自动返回列表 → 进下一门 → 全部完成 🎉；播放中切走标签页视频不暂停。详见 [demo/README.md](demo/README.md)。
+
 ## 测试
 
 ```bash
@@ -75,6 +91,7 @@ auto-learn.user.js       油猴脚本（规则驱动引擎，全部功能入口�
 rules-format.md          规则格式 + 命令参考
 playwright/auto-learn.js Playwright 兜底工具
 test/harness.js          冒烟测试（node test/harness.js）
+demo/                    本地演示平台（模拟真实平台特征）
 ```
 
 ## License
