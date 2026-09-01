@@ -159,11 +159,11 @@ function loadScript({ localStorage, sessionStorage, hostname } = {}) {
   const timers = [];   // 收集 setInterval 注册的定时器，测试时手动触发
   const fn = new Function(
     'window', 'document', 'location', 'EventTarget', 'MouseEvent', 'KeyboardEvent',
-    'localStorage', 'sessionStorage', 'setInterval',
+    'localStorage', 'sessionStorage', 'setInterval', 'setTimeout',
     SCRIPT + '\n;return window;'
   );
   const winOut = fn(win, doc, location, EventTarget, MouseEvent, KeyboardEvent, ls, ss,
-    (f, ms) => { timers.push({ f, ms }); return timers.length; });
+    (f, ms) => { timers.push({ f, ms }); return timers.length; }, () => 0);
   return { win: winOut, doc, localStorage: ls, sessionStorage: ss, timers };
 }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习系统自动播放（规则驱动版）
 // @namespace    local.auto-learn
-// @version      1.6.0
+// @version      1.6.1
 // @description  防暂停 + 自动续播 + 自动切下一集 + 多门课遍历 + 录制向导 + 全自动建档 + 学习记录
 // @author       you
 // @match        *://*/*
@@ -521,7 +521,25 @@
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
 
-  /* 4. 状态徽标（右下角，点击循环切换模式） */
+  /* 4. 注入提示条（书签/控制台使用时第一时间给反馈，任何页面都可见） */
+  function showToast(msg) {
+    try {
+      let t = document.getElementById('auto-learn-toast');
+      if (!t) {
+        t = document.createElement('div');
+        t.id = 'auto-learn-toast';
+        t.style.cssText = 'position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:2147483647;' +
+          'background:rgba(15,25,45,.94);color:#8fe3a8;font:13px/1.6 "Microsoft YaHei",sans-serif;' +
+          'padding:8px 16px;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.5);max-width:80vw;text-align:center;';
+        (document.body || document.documentElement).appendChild(t);
+      }
+      t.textContent = msg;
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(function () { try { t.remove(); } catch (e) {} }, 8000);
+    } catch (e) {}
+  }
+
+  /* 5. 状态徽标（右下角，点击循环切换模式） */
   function makeBadge() {
     if (!document.body) return;
     badge = document.createElement('div');
@@ -1384,6 +1402,7 @@
   setInterval(fakeActivity, CFG.fakeActivityMs);
   setInterval(tick, CFG.resumeMs);
   document.addEventListener('DOMContentLoaded', makeBadge);
+  showToast('✅ 自动播放 v1.6 已注入 — 这是学习平台将自动开始；普通页面无动作。右下角徽标可暂停/切模式。');
   console.log('[auto-learn v1.6] 已注入。当前域名规则：' + RULE.name + (RULE.draft ? '（草稿）' : '') +
     '，模式：' + mode + '（控制台输入 __autoLearn.help() 查看命令）');
 })();

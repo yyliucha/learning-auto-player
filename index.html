@@ -46,10 +46,13 @@
 
   <div class="card">
     <h2>第 2 步 · 之后每次使用（30 秒）</h2>
+    <div class="step" style="color:#ffd76e;font-weight:bold;">⚠️ 注意：</div>
+    <div class="step" style="color:#ffd76e;">书签要在 <b>你自己的学习平台页面</b> 上点击才有效！在本站页面/普通网页上点击不会有反应（那里没有视频可播）。</div>
     <div class="step">1️⃣ 打开你的 <b>学习平台</b>（任何网址，任意课程页/列表页）</div>
-    <div class="step">2️⃣ 点击书签栏里的 <b>▶ 播放</b>（或 🚀 遍历）——脚本实时从本网站加载最新版并自动开始</div>
+    <div class="step">2️⃣ 点击书签栏里的 <b>▶ 播放</b>（或 🚀 遍历）——页面下方会出现绿色提示条「✅ 自动播放已注入」</div>
     <div class="step">3️⃣ 自动建档 → 自动进课 → 播完自动关弹窗 → 自动切下一集 → 全部完成 🎉 右下角徽标可暂停/切模式</div>
-    <div class="hint">▶ 单课连播 = 你手动打开一门课，内部自动连播；🚀 自动遍历 = 从课程列表开始，自动刷掉所有未完成课程。</div>
+    <div class="step">✅ <b>不确定？先测试：</b>先点本页的 <a class="demo-link" href="https://yyliucha.github.io/learning-auto-player/demo/" target="_blank">打开演示平台 →</a> 等 30 秒看它自动跑完，再回自己的平台用同款操作。</div>
+    <div class="hint">▶ 单课连播 = 你手动打开一门课，内部自动连播；🚀 自动遍历 = 从课程列表开始，自动刷掉所有未完成课程。点击书签后如果提示条没出现，说明该平台禁止外部脚本（少见），可改用本地 start.bat。</div>
   </div>
 
   <div class="card">
@@ -79,7 +82,9 @@
   /* 书签代码：在目标页面注入同源的 auto-learn.user.js，可选自动遍历模式 */
   function makeBookmark(mode) {
     var s = "javascript:(function(){var s=document.createElement('script');" +
-      "s.src='" + origin + "/auto-learn.user.js';document.body.appendChild(s);" +
+      "s.src='" + origin + "/auto-learn.user.js';" +
+      "s.onerror=function(){alert('脚本加载失败：请确认网络可访问 " + origin + "（本站为同源发放，需联网加载最新版）');};" +
+      "document.body.appendChild(s);" +
       "var t=setInterval(function(){if(window.__autoLearn){" +
       (mode === 'traverse' ? "window.__autoLearn.setMode('traverse');" : '') +
       "clearInterval(t);}},200);})();";
