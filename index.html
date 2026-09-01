@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning Auto Player · 学习系统自动播放器</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font: 15px/1.8 "Microsoft YaHei", sans-serif; background: #0f192b; color: #cfd8e3; min-height: 100vh; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 40px 20px 60px; }
+  h1 { font-size: 26px; color: #7fd4ff; margin-bottom: 8px; }
+  .sub { color: #9fb6c9; margin-bottom: 28px; }
+  .card { background: #16273c; border: 1px solid #2c4a63; border-radius: 12px; padding: 22px 26px; margin-bottom: 18px; }
+  .card h2 { font-size: 17px; margin-bottom: 12px; color: #7fd4ff; }
+  .card .step { color: #9fb6c9; margin: 6px 0; }
+  .bm { display: inline-block; background: #1d6f42; color: #eafff1; padding: 10px 20px; border-radius: 8px; cursor: pointer; user-select: none; margin: 6px 10px 6px 0; text-decoration: none; font-size: 15px; }
+  .bm:hover { filter: brightness(1.15); }
+  .copy { background: #37475b; color: #cfd8e3; padding: 10px 18px; border-radius: 8px; cursor: pointer; border: 0; font-size: 14px; }
+  .hint { color: #9fb6c9; font-size: 13px; margin-top: 10px; }
+  .hint b { color: #ffd76e; }
+  a { color: #7fd4ff; }
+  code { background: #0b1420; padding: 1px 6px; border-radius: 4px; color: #ffd76e; }
+  .ver { color: #9fb6c9; font-size: 13px; text-align: center; margin-top: 30px; }
+  .footer { text-align: center; color: #6b7f95; font-size: 12px; margin-top: 20px; }
+  .demo-link { display: inline-block; margin-top: 6px; color: #7fd4ff; text-decoration: none; border: 1px solid #2c4a63; padding: 6px 16px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📚 Learning Auto Player</h1>
+  <div class="sub">学习系统自动播放器 —— 防暂停 · 自动续播 · 播完自动切下一集 · 多门课自动遍历 · 纯前端 · 数据全在你本地浏览器</div>
+
+  <div class="card">
+    <h2>第 1 步 · 把播放器放入浏览器（只需一次）</h2>
+    <div>
+      <a class="bm" id="bm-single" href="#" draggable="true">▶ 单课连播 · 拖我进书签栏</a>
+      <a class="bm" id="bm-traverse" href="#" draggable="true">🚀 自动遍历 · 拖我进书签栏</a>
+      <button class="copy" id="copy-btn">📋 复制书签地址（手动建书签用）</button>
+    </div>
+    <div class="hint">
+      <b>拖拽法</b>：把上面绿色按钮直接拖到浏览器书签栏（顶部收藏夹栏）；<br>
+      <b>右键法</b>：右键绿色按钮 → 添加到书签/收藏（Chrome 右键后看不到链接时用拖拽法）；<br>
+      <b>复制法</b>：点「📋 复制」→ 浏览器里新建书签，地址粘贴进去。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>第 2 步 · 之后每次使用（30 秒）</h2>
+    <div class="step">1️⃣ 打开你的 <b>学习平台</b>（任何网址，任意课程页/列表页）</div>
+    <div class="step">2️⃣ 点击书签栏里的 <b>▶ 播放</b>（或 🚀 遍历）——脚本实时从本网站加载最新版并自动开始</div>
+    <div class="step">3️⃣ 自动建档 → 自动进课 → 播完自动关弹窗 → 自动切下一集 → 全部完成 🎉 右下角徽标可暂停/切模式</div>
+    <div class="hint">▶ 单课连播 = 你手动打开一门课，内部自动连播；🚀 自动遍历 = 从课程列表开始，自动刷掉所有未完成课程。</div>
+  </div>
+
+  <div class="card">
+    <h2>第 3 步 · 备选方式</h2>
+    <div class="step">· <b>Tampermonkey</b>：装扩展后粘贴 <code>auto-learn.user.js</code>（打开平台即自动运行，无需点书签）</div>
+    <div class="step">· <b>本地网址播放器</b>：<code>playwright/start.bat</code> 输入网址，真实浏览器自动播放（用于有 isTrusted/心跳检测的硬平台）</div>
+    <div class="step">· <b>先看看效果</b>：<a class="demo-link" href="./demo/" target="_blank">打开本地演示平台 →</a>（模拟真实平台特征，自动跑完给你看）</div>
+  </div>
+
+  <div class="card">
+    <h2>❓ 常见问题</h2>
+    <div class="step">· <b>隐私</b>：网站只是"脚本发放站"，一切运行都在你自己的浏览器里，你的账号、进度、数据不上传任何服务器</div>
+    <div class="step">· <b>为什么不能"我替你跑"</b>：需要登你账号的播放必须在你的浏览器里进行；把账号交给服务器有风险，且服务器 IP 会被平台识别</div>
+    <div class="step">· <b>首次适配</b>：常见平台打开即用；个别平台结构特殊会自动回退通用模式，把右下角徽标文字发我即可</div>
+    <div class="step">· <b>合规</b>：仅供个人学习使用，请确认符合所在平台的使用规范</div>
+  </div>
+
+  <div class="ver" id="ver">脚本版本：读取中…</div>
+  <div class="footer">MIT License · <a href="https://github.com/yyliucha/learning-auto-player" target="_blank">GitHub 源码</a></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var origin = location.origin;
+
+  /* 书签代码：在目标页面注入同源的 auto-learn.user.js，可选自动遍历模式 */
+  function makeBookmark(mode) {
+    var s = "javascript:(function(){var s=document.createElement('script');" +
+      "s.src='" + origin + "/auto-learn.user.js';document.body.appendChild(s);" +
+      "var t=setInterval(function(){if(window.__autoLearn){" +
+      (mode === 'traverse' ? "window.__autoLearn.setMode('traverse');" : '') +
+      "clearInterval(t);}},200);})();";
+    return s;
+  }
+
+  var bmSingle = makeBookmark('single');
+  var bmTraverse = makeBookmark('traverse');
+  document.getElementById('bm-single').href = bmSingle;
+  document.getElementById('bm-traverse').href = bmTraverse;
+
+  document.getElementById('copy-btn').addEventListener('click', function () {
+    var text = '▶ 教科书链接：\n' + bmSingle + '\n\n🚀 自动遍历链接：\n' + bmTraverse;
+    var done = function () { alert('书签地址已复制！\n新建书签 → 名称随意 → 地址粘贴 → 保存'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
+    } else {
+      fallbackCopy(text); done();
+    }
+  });
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  /* 读取脚本最新版本号（同源读取，展示用） */
+  fetch('auto-learn.user.js').then(function (r) { return r.text(); }).then(function (src) {
+    var m = src.match(/@version\s+([\d.]+)/);
+    document.getElementById('ver').textContent = '脚本版本：v' + (m ? m[1] : '?') + ' · 本站加载的是最新版';
+  }).catch(function () {
+    document.getElementById('ver').textContent = '脚本版本：未知（离线/跨域名部署，不影响书签功能）';
+  });
+})();
+</script>
+</body>
+</html>

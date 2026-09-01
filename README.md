@@ -51,7 +51,18 @@
 
 完整规则格式、控制台命令说明见 [rules-format.md](rules-format.md)。
 
-## 网址播放器（傻瓜式，真实平台适用）
+## 网站版（纯前端部署，别人直接来用）
+
+**https://yyliucha.github.io/learning-auto-player/**（GitHub Pages 静态部署，零后端）
+
+使用三步：
+1. 打开上面网址 → 把"▶ 单课连播"或"🚀 自动遍历"绿色按钮**拖到浏览器书签栏**（一次性）
+2. 打开你自己的学习平台（任意网址）
+3. 点击书签 → 自动从网站加载最新版脚本并开始自动播放
+
+原理：书签是 `javascript:` 小工具，在目标页面注入同源加载的 `auto-learn.user.js`（`<script>` 跨域不受限，任何静态服务器/GitHub Pages 均可部署）。网站只是"脚本发放站"，一切运行都在用户浏览器内，账号与数据不上传任何服务器。
+
+## 网址播放器（本地，傻瓜式，真实平台适用）
 
 **双击 `playwright/start.bat` → 输入平台网址 → 真实浏览器打开 → 登录 → 全自动播放。**
 
@@ -94,6 +105,7 @@ node test/harness.js
 ```
 LICENSE                  MIT 许可证
 auto-learn.user.js       油猴脚本（规则驱动引擎，全部功能入口）
+index.html               启动网站（书签生成器，可部署到任意静态服务器）
 rules-format.md          规则格式 + 命令参考
 playwright/auto-learn.js 网址播放器（真实浏览器，输入网址即用）
 playwright/start.bat     傻瓜启动器（双击 → 输入网址）
