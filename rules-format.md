@@ -1,6 +1,23 @@
-# 学习系统万能播放器 —— 规则格式参考（v1.5）
+# 学习系统万能播放器 —— 规则格式参考（v1.6）
 
 配套脚本：`auto-learn.user.js`（规则驱动版）
+
+## 全自动建档（v1.6，零配置新平台）
+
+陌生平台**首次访问自动扫描**页面（≥3 个同结构子元素的列表候选、按类名区分课程/章节），生成**草稿规则**（徽标显示 `[自动建档·草稿]`），无需任何手动配置：
+
+- 运行成功（自动切到下一集）→ 草稿自动**转正**（去掉 draft 标记）
+- 运行失败（找不到下一项/超时）→ 自动**回退通用模式** + 记录诊断到学习记录
+- 想手动修正：`__autoLearn.wizard()` 打开向导，或 `__autoLearn.diagnose()` 看诊断报告
+- 有稳定规则/内置规则的域名不会被打扰
+
+## 学习记录（v1.6，本地统计）
+
+本地 localStorage 自动记录：完成视频数、观看时长、完成课程数、今日进度、操作日志（含失败诊断）。徽标显示"今日 X 集·Y 分"。
+
+- `__autoLearn.report()` 输出日报/周报（今日/近 7 天/最近活动）
+- `__autoLearn.diagnose()` 输出诊断报告（当前规则、失败记录、页面扫描、视频状态）
+- `__autoLearn.clearStats()` 清空本域学习记录
 
 ## 三种模式（点击右下角徽标循环切换，状态存 localStorage）
 
@@ -142,7 +159,10 @@ __autoLearn.importRules('{...}')          // 导入规则
 __autoLearn.setMode('single|traverse|off') // 切换模式
 __autoLearn.scan()                        // 扫描页面结构（辅助写规则）
 __autoLearn.wizard()                      // 打开/关闭录制向导
+__autoLearn.report()                      // 学习记录日报/周报
+__autoLearn.diagnose()                    // 诊断报告（排查用）
 __autoLearn.clearDone()                   // 清空完成记录（重新遍历用）
+__autoLearn.clearStats()                  // 清空本域学习记录
 ```
 
 注意：localStorage 是按域名隔离的，`exportRules()` 只能导出当前域名下的规则。
@@ -178,4 +198,5 @@ node playwright/auto-learn.js --domain example.com [--rule rules/xx.json] [--lim
 - [x] Phase 2：课程遍历状态机（v1.1）
 - [x] Phase 3：录制向导（v1.2 核心 + v1.3 智能拾取）
 - [x] Phase 4：Playwright 兜底工具就绪（v1.4，随时可用）
+- [x] Phase 5：全自动建档 + 失败回退/诊断 + 学习记录（v1.6）
 - [ ] 实测收尾：在真实平台用向导配置课程项 + 验证遍历

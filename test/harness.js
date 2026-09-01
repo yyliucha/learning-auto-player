@@ -147,13 +147,13 @@ function makeStore() {
 }
 
 /* ---------------- 加载脚本（一次加载 = 一个独立实例） ---------------- */
-function loadScript({ localStorage, sessionStorage } = {}) {
+function loadScript({ localStorage, sessionStorage, hostname } = {}) {
   const doc = makeDoc();
   const win = { __AUTO_LEARN__: false, innerWidth: 1920, innerHeight: 1080, addEventListener() {}, dispatchEvent() {} };
   class EventTarget { addEventListener() {} }
   class MouseEvent { constructor(type, opts) { this.type = type; Object.assign(this, opts); } }
   class KeyboardEvent { constructor(type, opts) { this.type = type; Object.assign(this, opts); } }
-  const location = { hostname: 'example.com' };
+  const location = { hostname: hostname || 'example.com' };
   const ls = localStorage || makeStore();
   const ss = sessionStorage || makeStore();
   const timers = [];   // 收集 setInterval 注册的定时器，测试时手动触发
@@ -572,6 +572,121 @@ test('wizard：只拾取课程项生成规则，保留内置返回按钮配置�
   assert.strictEqual(r.videoPage.next.listSelector, '.chapter-item .item-wrapper', '章节配置应保留');
   assert.strictEqual(r.videoPage.next.skipClass, 'no-video', '跳过项配置应保留');
   assert.ok(r.videoPage.dialogs[0].dismissTexts.includes('取消'), '弹窗配置应保留');
+});
+
+/* 场景 6：v1.6 全自动建档 + 草稿转正 + 失败回退 + 学习记录 */
+test('auto-draft：陌生平台自动扫描生成草稿规则', () => {
+  const F = loadScript({ hostname: 'school.example.edu' });
+  const t6 = F.win.__autoLearn._t;
+  const list = new FakeEl('div', 'lesson-list');
+  for (let i = 1; i <= 3; i++) {
+    const item = new FakeEl('div', 'lesson-item' + (i === 1 ? ' active' : ''));
+    const n = new FakeEl('span', 'lesson-name');
+    n.innerText = '第' + i + '节';
+    item.append(n);
+    list.append(item);
+  }
+  F.doc.body.append(list);
+  assert.strictEqual(t6.maybeAutoDraft(), true);
+  const r = t6.getRule();
+  assert.strictEqual(r.draft, true, '应生成草稿规则');
+  assert.strictEqual(r.videoPage.next.strategy, 'chapter-list');
+  assert.strictEqual(r.videoPage.next.listSelector, 'div.lesson-item');
+  assert.strictEqual(r.videoPage.next.activeClass, 'active');
+});
+
+test('草稿转正：切换流程成功 → draft 标记移除', () => {
+  const F = loadScript({ hostname: 'school.example.edu' });
+  const t6 = F.win.__autoLearn._t;
+  const list = new FakeEl('div', 'lesson-list');
+  for (let i = 1; i <= 3; i++) {
+    const item = new FakeEl('div', 'lesson-item' + (i === 1 ? ' active' : ''));
+    const n = new FakeEl('span', 'lesson-name');
+    n.innerText = '第' + i + '节';
+    item.append(n);
+    list.append(item);
+  }
+  F.doc.body.append(list);
+  t6.maybeAutoDraft();
+  const video = new FakeVideo();
+  video.currentTime = 306;
+  video.ended = true;
+  video.paused = true;
+  F.doc.body.append(video);
+  t6.startNextFlow();
+  const flowIdx = F.timers.length - 1;
+  F.timers[flowIdx].f();                 // 点下一章
+  video.ended = false;
+  video.paused = false;
+  video.currentTime = 1;
+  F.timers[flowIdx].f();                 // 新视频开播 → 成功
+  assert.strictEqual(t6.status(), '已自动进入下一集');
+  assert.strictEqual(t6.getRule().draft, false, '草稿应自动转正');
+});
+
+test('失败回退：草稿规则失败 → 回退通用模式并记录诊断', () => {
+  const ls = makeStore();
+  ls.setItem('autoLearn.rule.school.example.edu', JSON.stringify({
+    name: '自动建档', draft: true,
+    videoPage: {
+      videoSelector: 'video',
+      next: { strategy: 'chapter-list', listSelector: '.chapter-item .item-wrapper', activeClass: 'active', skipClass: '', nameSelector: '', texts: [], selector: '' },
+      fallbackTexts: [],
+      dialogs: [{ selector: '', dismissTexts: ['取消', '关闭'] }],
+      completion: { stallSeconds: 24 }
+    },
+    courseListPage: null
+  }));
+  const F = loadScript({ hostname: 'school.example.edu', localStorage: ls });
+  const t6 = F.win.__autoLearn._t;
+  const video = new FakeVideo();
+  video.currentTime = 306;
+  video.ended = true;
+  video.paused = true;
+  F.doc.body.append(video);   // 无章节结构 → 草稿点不了下一项
+  t6.startNextFlow();
+  const flowIdx = F.timers.length - 1;
+  for (let i = 0; i < 5; i++) F.timers[flowIdx].f();   // idle 满 5 → 回退
+  assert.strictEqual(t6.getRule().name, '通用模式', '应回退通用模式');
+  const stats = t6.loadStats();
+  assert.ok(stats.log.some(e => e.type === 'fail'), '应记录失败诊断');
+});
+
+test('学习记录：完成视频入统计 + report() 日报', () => {
+  const ls = makeStore();
+  ls.setItem('autoLearn.rule.example.com', JSON.stringify(RULE_JSON));
+  const F = loadScript({ localStorage: ls });
+  const t6 = F.win.__autoLearn._t;
+  const mkCh = (cls, name) => {
+    const item = new FakeEl('div', 'chapter-item level-2');
+    const wrap = new FakeEl('div', 'item-wrapper' + cls);
+    const nameEl = new FakeEl('span', 'chapter-name');
+    nameEl.innerText = name;
+    wrap.append(nameEl);
+    item.append(wrap);
+    return wrap;
+  };
+  const w1 = mkCh(' active', '第一节');
+  const w2 = mkCh('', '第二节');
+  F.doc.body.append(w1.parentElement, w2.parentElement);
+  const video = new FakeVideo();
+  video.currentTime = 306;
+  video.ended = true;
+  video.paused = true;
+  F.doc.body.append(video);
+  t6.startNextFlow();
+  const flowIdx = F.timers.length - 1;
+  F.timers[flowIdx].f();
+  video.ended = false;
+  video.paused = false;
+  video.currentTime = 1;
+  F.timers[flowIdx].f();   // 成功 → recordStat('video', ...)
+  const s = t6.loadStats();
+  assert.strictEqual(s.videos, 1, '完成集数应计 1');
+  assert.ok(s.seconds >= 306, '时长应计入（>=306 秒）');
+  assert.ok(Object.keys(s.days).length >= 1, '应有今日记录');
+  const rep = F.win.__autoLearn.report();
+  assert.ok(String(rep).includes('今日：1 集'), '日报应显示今日完成');
 });
 
 console.log('\n结果：' + passed + ' 通过，' + failed + ' 失败');

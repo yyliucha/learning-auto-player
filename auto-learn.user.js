@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         学习系统自动播放（规则驱动版）
 // @namespace    local.auto-learn
-// @version      1.5.0
-// @description  防暂停 + 自动续播 + 自动切下一集 + 多门课遍历 + 录制向导；按域名加载规则
+// @version      1.6.0
+// @description  防暂停 + 自动续播 + 自动切下一集 + 多门课遍历 + 录制向导 + 全自动建档 + 学习记录
 // @author       you
 // @match        *://*/*
 // @run-at       document-start
@@ -11,24 +11,31 @@
 // ==/UserScript==
 
 /* ============================================================
- * 学习系统自动播放 v1.2 —— 规则驱动版（新增录制向导）
+ * 学习系统自动播放 v1.6 —— 全自动建档 + 学习记录
  * ------------------------------------------------------------
  * 安装：
  *   方式 A（推荐）：Tampermonkey 新建脚本，粘贴本文件内容保存。
  *   方式 B（临时）：F12 → Console → 粘贴全部内容 → 回车。
- *   两种方式行为一致，规则/模式都存 localStorage。
+ *   两种方式行为一致，规则/模式/学习记录都存 localStorage。
  *
  * 三种模式（点击右下角徽标循环切换）：
  *   ▶ 单课连播（默认）：一门课内自动切下一集
  *   🚀 自动遍历：一门课播完 → 返回列表 → 自动进下一门课
  *   ⏸ 关闭：完全停手
  *
- * 录制向导（配置新平台，免写代码）：
+ * v1.6 新功能：
+ *   - 全自动建档：陌生平台首次访问自动扫描并生成"草稿规则"，运行成功自动转正，
+ *     失败自动回退通用模式并记录诊断（无需手动配置，点开页面即用）
+ *   - 学习记录：自动统计完成视频数 / 观看时长 / 完成课程数 / 今日进度（本地存储），
+ *     徽标显示今日进度，__autoLearn.report() 出日报/周报
+ *   - 诊断导出：__autoLearn.diagnose() 输出完整诊断报告（规则、失败记录、页面扫描、
+ *     视频状态），供排查，无需手动翻 F12
+ *
+ * 录制向导（手动配置时使用）：
  *   控制台输入 __autoLearn.wizard() 打开面板，然后：
  *   ① 点一个"角色"按钮（如"② 章节项"）
  *   ② 去页面上点对应的元素（鼠标悬停有黄色高亮框）
  *   ③ 全部点完 → 点"生成规则并试运行" → 规则保存并立即生效
- *   ④ 试运行结果会显示在面板和控制台
  *   提示：点"章节项/课程项"时点行内任意位置都行（自动定位到行容器）；
  *         点按钮类角色时点图标/文字都行（自动定位到按钮元素）。
  *
@@ -43,6 +50,9 @@
  *   __autoLearn.scan()          扫描页面结构（辅助写规则）
  *   __autoLearn.wizard()        打开/关闭录制向导
  *   __autoLearn.clearDone()     清空"已完成课程"记录
+ *   __autoLearn.report()        学习记录日报/周报
+ *   __autoLearn.diagnose()      生成诊断报告（排查用）
+ *   __autoLearn.clearStats()    清空学习记录
  *
  * 跑之前：Windows 别休眠（powercfg /change standby-timeout-ac 0），别锁屏。
  * ============================================================ */
@@ -131,6 +141,7 @@
     const completion = vp.completion || {};
     return {
       name: (rule && rule.name) || '未命名规则',
+      draft: !!(rule && rule.draft),
       videoPage: {
         videoSelector: vp.videoSelector || 'video',
         next: {
@@ -165,6 +176,169 @@
   }
 
   let RULE = getRule();
+
+  /* ---------------- 学习记录（本地统计，不上传） ---------------- */
+  const STATS_KEY = 'autoLearn.stats.' + location.hostname;
+
+  function todayKey() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function loadStats() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STATS_KEY) || 'null');
+      if (s && typeof s === 'object' && s.log) return s;
+    } catch (e) {}
+    return { videos: 0, courses: 0, seconds: 0, days: {}, log: [] };
+  }
+
+  function saveStats(s) {
+    try { localStorage.setItem(STATS_KEY, JSON.stringify(s)); } catch (e) {}
+  }
+
+  function recordStat(type, detail, seconds) {
+    const s = loadStats();
+    const day = todayKey();
+    const d = s.days[day] || { videos: 0, seconds: 0 };
+    if (type === 'video') {
+      s.videos++;
+      d.videos++;
+      const sec = Math.round(seconds || 0);
+      if (sec > 0 && sec < 14400) { s.seconds += sec; d.seconds += sec; }
+    } else if (type === 'course') {
+      s.courses++;
+    }
+    s.days[day] = d;
+    s.log.push({ t: Date.now(), type: type, detail: String(detail || '').slice(0, 120) });
+    if (s.log.length > 500) s.log = s.log.slice(-500);
+    saveStats(s);
+  }
+
+  function getTodayStats() {
+    const s = loadStats();
+    const d = s.days[todayKey()] || { videos: 0, seconds: 0 };
+    return { videos: s.videos, courses: s.courses, seconds: s.seconds, today: d };
+  }
+
+  /* ---------------- 全自动建档（扫描 → 草稿规则 → 运行验证转正） ---------------- */
+  let draftAttempted = false, draftTries = 0;
+
+  /* 在页面里找"重复结构"候选（≥3 个同结构子元素的容器），并区分课程/章节 */
+  function detectListCandidates() {
+    const out = { chapter: null, course: null };
+    const KEY_COURSE = /course|subject|class|homework|book/i;
+    const KEY_CHAPTER = /chapter|lesson|item|wrapper|section|unit|video|module|info/i;
+    const BAD = /menu|nav|crumb|pagi|tabs|swiper|crumbs|toolbar|topbar|header|footer/i;
+    const STATE = /^(active|selected|current|hover|focus|open|show|hidden|is-|vjs-|el-)/;
+    document.querySelectorAll('div, ul, ol, section').forEach(p => {
+      if (!p.children || p.children.length < 3 || p.children.length > 80) return;
+      const sigs = {};
+      for (const c of p.children) {
+        if (c.tagName === 'VIDEO') continue;
+        const cls = (typeof c.className === 'string' ? c.className : '').trim().split(/\s+/)
+          .filter(x => x && !STATE.test(x)).slice(0, 2).join('.');
+        if (!cls) continue;
+        const sig = c.tagName.toLowerCase() + '.' + cls;
+        sigs[sig] = (sigs[sig] || 0) + 1;
+      }
+      let top = null;
+      for (const k of Object.keys(sigs)) if (!top || sigs[k] > top[1]) top = [k, sigs[k]];
+      if (!top || top[1] < 3 || BAD.test(top[0])) return;
+      const sel = top[0];
+      if (KEY_COURSE.test(sel) && !out.course) {
+        out.course = { selector: sel, activeClass: detectActiveClass(sel) || 'active', skipClass: detectSkipClass(sel) };
+      } else if (!KEY_COURSE.test(sel) && KEY_CHAPTER.test(sel) && !out.chapter) {
+        out.chapter = { selector: sel, activeClass: detectActiveClass(sel) || 'active', skipClass: detectSkipClass(sel) };
+      }
+    });
+    return out;
+  }
+
+  /* 自动建档：无规则/无内置的域名，扫描页面生成草稿规则（可多次合并） */
+  function maybeAutoDraft() {
+    if (!document.body) return false;
+    const host = location.hostname;
+    let stored = null;
+    try {
+      const raw = localStorage.getItem(PREFIX + host);
+      if (raw) stored = JSON.parse(raw);
+    } catch (e) {}
+    if (stored && !stored.draft) return true;      // 已有稳定规则
+    if (!stored && BUILTIN_RULES[host]) return true;  // 已有内置规则
+
+    const found = detectListCandidates();
+    if (!found.chapter && !found.course) return false;   // 本页无候选，等下一轮
+
+    const rule = (stored && stored.draft) ? normalizeRule(stored) : {
+      name: '自动建档',
+      draft: true,
+      videoPage: {
+        videoSelector: 'video',
+        next: {
+          strategy: 'button',
+          listSelector: '',
+          activeClass: 'active',
+          skipClass: '',
+          nameSelector: '',
+          texts: GENERIC_RULE.videoPage.next.texts,
+          selector: ''
+        },
+        fallbackTexts: [],
+        dialogs: [{ selector: '', dismissTexts: ['取消', '关闭'] }],
+        completion: { stallSeconds: 24 }
+      },
+      courseListPage: null
+    };
+    if (found.chapter) {
+      rule.videoPage.next = {
+        strategy: 'chapter-list',
+        listSelector: found.chapter.selector,
+        activeClass: found.chapter.activeClass || 'active',
+        skipClass: found.chapter.skipClass || '',
+        nameSelector: '',
+        texts: [],
+        selector: ''
+      };
+    }
+    if (found.course) {
+      rule.courseListPage = {
+        courseItemSelector: found.course.selector,
+        nameSelector: '',
+        enterTexts: [],
+        doneSelector: '',
+        doneTexts: ['已完成'],
+        backSelector: '',
+        backTexts: ['返回'],
+        maxCoursesPerSession: 20
+      };
+    }
+    rule.draft = true;
+    try { localStorage.setItem(PREFIX + host, JSON.stringify(rule)); } catch (e) { return false; }
+    RULE = getRule();
+    lastAction = '已自动建档草稿规则（运行成功将自动转正）';
+    updateBadge();
+    return true;
+  }
+
+  /* 草稿转正：运行验证通过后去掉草稿标记 */
+  function promoteDraft() {
+    if (!RULE.draft) return;
+    const clean = JSON.parse(JSON.stringify(RULE));
+    delete clean.draft;
+    try { localStorage.setItem(PREFIX + location.hostname, JSON.stringify(clean)); } catch (e) {}
+    RULE = getRule();
+    updateBadge();
+  }
+
+  /* 失败处理：记录诊断；草稿规则失败时回退通用模式 */
+  function fallbackToGeneric(reason) {
+    recordStat('fail', reason, 0);
+    if (!RULE.draft) return false;
+    RULE = normalizeRule(GENERIC_RULE);
+    recordStat('fail', '草稿规则已回退通用模式', 0);
+    return true;
+  }
 
   /* ---------------- 模式系统（单课连播 / 自动遍历 / 关闭） ---------------- */
   const MODE_KEY = 'autoLearn.mode';
@@ -369,7 +543,12 @@
     if (!badge) return;
     const color = mode === 'off' ? '#FF8A8A' : mode === 'traverse' ? '#7FD4FF' : '#7CFC98';
     badge.style.color = color;
-    badge.textContent = modePrefix() + '[' + RULE.name + '] ' + lastAction;
+    const name = RULE.name + (RULE.draft ? '·草稿' : '');
+    const today = getTodayStats().today;
+    const extra = sawVideo
+      ? (' ｜ 今日 ' + today.videos + '集·' + Math.round(today.seconds / 60) + '分')
+      : '';
+    badge.textContent = modePrefix() + '[' + name + '] ' + lastAction + extra;
   }
 
   /* 5. 伪造"人还在"的活动信号 */
@@ -403,6 +582,8 @@
       if (v && !v.paused && !v.ended && moved) {
         clearInterval(timer);
         flowRunning = false;
+        recordStat('video', '完成一集', startT > 0 ? startT : 0);   // 学习记录
+        promoteDraft();                                             // 草稿规则运行验证通过 → 转正
         lastAction = '已自动进入下一集';
         updateBadge();
         return;
@@ -411,7 +592,8 @@
       if (attempts > 20) {
         clearInterval(timer);
         flowRunning = false;
-        lastAction = '自动切换失败，请瞄一眼页面';
+        const fb = fallbackToGeneric('切换超时（40 秒无新视频）');
+        lastAction = '自动切换失败' + (fb ? '，草稿规则已回退通用模式（__autoLearn.diagnose() 看原因）' : '，请瞄一眼页面');
         updateBadge();
         return;
       }
@@ -459,7 +641,11 @@
   /* 6.5 课程播完（没有下一项了）→ 标记完成 + 点返回 */
   function handleCourseFinished() {
     if (mode === 'traverse' && RULE.courseListPage) {
-      if (currentCourseKey) addDone(currentCourseKey);
+      if (currentCourseKey) {
+        addDone(currentCourseKey);
+        recordStat('course', '完成课程：' + currentCourseKey, 0);
+      }
+      promoteDraft();          // 遍历走到"无下一项"说明章节规则工作正常
       currentCourseKey = null;
       saveSession();
       const back = findBackButton();
@@ -470,7 +656,12 @@
         lastAction = '本课程播完，但没找到返回按钮';
       }
     } else {
-      lastAction = '没有可点的下一项（可能已全部播完）';
+      if (RULE.draft) {
+        const fb = fallbackToGeneric('单课模式找不到下一项（草稿规则可能不准）');
+        lastAction = '没有可点的下一项' + (fb ? '，草稿规则已回退通用模式（__autoLearn.diagnose() 看原因）' : '（可能已全部播完）');
+      } else {
+        lastAction = '没有可点的下一项（可能已全部播完）';
+      }
     }
     updateBadge();
   }
@@ -488,6 +679,13 @@
     document.onvisibilitychange = null;
     document.onblur = null;
     window.onblur = null;
+
+    /* 7.0 全自动建档：无规则的陌生平台，自动扫描生成草稿规则（最多尝试 6 轮） */
+    if (mode !== 'off' && !draftAttempted) {
+      draftTries++;
+      const found = maybeAutoDraft();
+      if (found || draftTries >= 6) draftAttempted = true;
+    }
 
     const stallLimit = Math.max(2, Math.ceil((RULE.videoPage.completion.stallSeconds || 24) * 1000 / CFG.resumeMs));
 
@@ -1023,11 +1221,62 @@
     return checks;
   }
 
+  /* 8.5 学习记录日报/周报 + 诊断报告 */
+  function buildReport() {
+    const s = loadStats();
+    const day = todayKey();
+    const t = s.days[day] || { videos: 0, seconds: 0 };
+    const lines = [
+      '## 学习记录（' + location.hostname + '）',
+      '时间：' + new Date().toLocaleString(),
+      '今日：' + t.videos + ' 集 · ' + Math.round(t.seconds / 60) + ' 分钟',
+      '累计：' + s.videos + ' 集 · ' + Math.round(s.seconds / 60) + ' 分钟 · 完成课程 ' + s.courses + ' 门',
+      '近 7 天：'
+    ];
+    const days = Object.keys(s.days).sort().slice(-7);
+    for (const k of days) {
+      lines.push('  ' + k + '：' + s.days[k].videos + ' 集 · ' + Math.round(s.days[k].seconds / 60) + ' 分钟');
+    }
+    lines.push('最近活动：');
+    for (const e of s.log.slice(-8).reverse()) {
+      lines.push('  [' + new Date(e.t).toLocaleTimeString() + '] ' + e.type + ' ' + e.detail);
+    }
+    return lines.join('\n');
+  }
+
+  function buildDiagnose() {
+    const st = loadStats();
+    const fails = st.log.filter(e => e.type === 'fail').slice(-10);
+    const scan = JSON.parse(window.__autoLearn.scan());
+    const v = findVideo();
+    const lines = [
+      '## 诊断报告（' + location.hostname + '）',
+      '时间：' + new Date().toLocaleString() + '　模式：' + mode + '　草稿规则：' + (RULE.draft ? '是' : '否'),
+      '',
+      '### 当前规则',
+      JSON.stringify(RULE, null, 2),
+      '',
+      '### 最近失败记录',
+      fails.length ? fails.map(e => new Date(e.t).toLocaleTimeString() + '  ' + e.detail).join('\n') : '（无）',
+      '',
+      '### 页面扫描摘要',
+      '视频元素：' + scan.videos,
+      '列表候选：' + (scan.listCandidates && scan.listCandidates.length
+        ? scan.listCandidates.map(c => c.childSig + ' x' + c.childCount).join('、')
+        : '无'),
+      '按钮：' + ((scan.buttons || []).join('、') || '无'),
+      '',
+      '### 视频状态',
+      v ? ('ended=' + v.ended + ' paused=' + v.paused + ' time=' + v.currentTime + ' duration=' + v.duration) : '无视频'
+    ];
+    return lines.join('\n');
+  }
+
   /* 9. 规则管理 API + 页面扫描助手（F12 控制台用） */
   window.__autoLearn = {
     help: () => 'getRule() 查看规则 | saveRule({...}) 保存 | clearRule() 清除 | exportRules() 导出 | ' +
       'importRules(\'{...}\') 导入 | setMode(\'single|traverse|off\') 切模式 | scan() 扫页面 | ' +
-      'wizard() 录制向导 | clearDone() 清完成记录',
+      'wizard() 录制向导 | report() 学习日报 | diagnose() 诊断 | clearDone() 清完成记录 | clearStats() 清学习记录',
     getRule: () => JSON.parse(JSON.stringify(RULE)),
     saveRule: rule => {
       if (!rule || typeof rule !== 'object') return '用法：__autoLearn.saveRule({ name, videoPage: {...}, courseListPage: {...} })';
@@ -1071,6 +1320,12 @@
     clearDone: () => {
       try { sessionStorage.removeItem(DONE_KEY); } catch (e) {}
       return '已清空本域"已完成课程"记录';
+    },
+    report: () => buildReport(),
+    diagnose: () => buildDiagnose(),
+    clearStats: () => {
+      try { localStorage.removeItem(STATS_KEY); } catch (e) {}
+      return '已清空本域学习记录';
     },
     wizard: arg => {
       if (arg === 'close') { closeWizard(); return '已关闭'; }
@@ -1118,7 +1373,9 @@
     enterCourse, findBackButton,
     pickListItem, pickButton, cssOf, detectActiveClass, detectSkipClass,
     assignRole, generateRule,
-    getRule, setMode, tick, startNextFlow, handleCourseFinished,
+    setMode, tick, startNextFlow, handleCourseFinished,
+    maybeAutoDraft, promoteDraft, fallbackToGeneric, recordStat, loadStats, getTodayStats,
+    getRule: () => JSON.parse(JSON.stringify(RULE)),
     status: () => lastAction
   };
 
@@ -1127,6 +1384,6 @@
   setInterval(fakeActivity, CFG.fakeActivityMs);
   setInterval(tick, CFG.resumeMs);
   document.addEventListener('DOMContentLoaded', makeBadge);
-  console.log('[auto-learn v1.5] 已注入。当前域名规则：' + RULE.name +
+  console.log('[auto-learn v1.6] 已注入。当前域名规则：' + RULE.name + (RULE.draft ? '（草稿）' : '') +
     '，模式：' + mode + '（控制台输入 __autoLearn.help() 查看命令）');
 })();
