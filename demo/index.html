@@ -63,15 +63,15 @@
     </div>
   </div>
   <div class="help">
-    <b>演示步骤（v1.6 全自动建档体验）：</b>
+    <b>傻瓜式演示（v1.6 全自动）：</b>
     <ol>
-      <li>把 <code>auto-learn.user.js</code>（v1.6）粘贴到 F12 控制台回车，或确认 Tampermonkey 已更新并启用</li>
-      <li>点击下方按钮 👉 <button class="btn" id="traverse-btn">🚀 一键进入自动遍历</button>（或点右下角徽标切换到蓝青色）</li>
-      <li><b>什么都不用配</b>——脚本会自动扫描建档（下方状态条会显示「自动建档·草稿」）并开始跑：自动进课 → 播完自动关"课程评价"弹窗 → 自动切下一章节 → 课程播完自动返回列表 → 进下一门 → 全部完成 🎉</li>
+      <li>打开页面后<b>什么都不用点</b>——脚本会自动加载，约 2 秒后自动开始自动遍历</li>
+      <li>观察下方状态条：会自动显示「自动建档·草稿」→ 自动进课 → 播完自动关"课程评价"弹窗 → 自动切下一章节 → 课程播完自动返回列表 → 进下一门 → <b>全部完成 🎉</b></li>
+      <li>想暂停/切模式：点右下角徽标（蓝色=自动遍历，绿色=单课连播，红色=关闭）</li>
       <li>播放中切到别的标签页 10 秒再回来：视频没被暂停（防暂停）</li>
-      <li>控制台看学习记录：<code>__autoLearn.report()</code> 日报/周报；出问题时 <code>__autoLearn.diagnose()</code> 诊断报告</li>
+      <li>看学习记录：控制台输入 <code>__autoLearn.report()</code>（日报/周报）；出问题时 <code>__autoLearn.diagnose()</code>（诊断报告）</li>
     </ol>
-    <div id="demo-status" style="margin-top:10px;padding:8px 10px;background:#0b1420;border:1px solid #2c4a63;border-radius:6px;color:#8fe3a8;font-size:12px;font-family:Consolas,monospace;">等待脚本注入…</div>
+    <div id="demo-status" style="margin-top:10px;padding:8px 10px;background:#0b1420;border:1px solid #2c4a63;border-radius:6px;color:#8fe3a8;font-size:12px;font-family:Consolas,monospace;">正在自动加载脚本…</div>
     <div style="color:#9fb6c9;margin-top:8px;">本页模拟真实平台的三个特征：切标签页暂停视频（visibilitychange）、每集结束弹"课程评价"、无自动连播入口（需点"下一课"/章节切换）。</div>
   </div>
 </div>
@@ -246,12 +246,34 @@ setInterval(() => {
   if (!box) return;
   try {
     const api = window.__autoLearn;
-    if (!api || !api._t) { box.textContent = '等待脚本注入…（粘贴脚本后自动出现）'; return; }
+    if (!api || !api._t) { box.textContent = '等待脚本注入…'; return; }
     const r = api._t.getRule();
     const ruleName = r ? ('[' + r.name + (r.draft ? '·草稿' : '') + ']') : '[无规则]';
     box.textContent = '规则：' + ruleName + ' ｜ 模式：' + api.getMode() + ' ｜ ' + api._t.status();
   } catch (e) { box.textContent = '状态读取失败：' + e.message; }
 }, 500);
+
+/* 傻瓜式自动注入：页面加载后自动加载本仓库的 auto-learn.user.js 并自动开始遍历 */
+(async function autoInject() {
+  const statusEl = document.getElementById('demo-status');
+  const sources = ['../auto-learn.user.js', 'auto-learn.user.js'];
+  let loaded = false;
+  for (const src of sources) {
+    try {
+      const res = await fetch(src);
+      if (!res.ok) continue;
+      (0, eval)(await res.text());
+      loaded = true;
+      break;
+    } catch (e) { /* 尝试下一个来源 */ }
+  }
+  if (window.__autoLearn) {
+    statusEl.textContent = '✅ 脚本已自动注入，2 秒后自动开始遍历…';
+    setTimeout(() => { try { window.__autoLearn.setMode('traverse'); } catch (e) {} }, 2000);
+  } else {
+    statusEl.textContent = '⚠ 脚本自动加载失败：请通过本地服务打开（http://localhost:8000/demo/），或在 F12 控制台粘贴脚本';
+  }
+})();
 </script>
 </body>
 </html>
