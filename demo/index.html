@@ -63,15 +63,16 @@
     </div>
   </div>
   <div class="help">
-    <b>演示步骤：</b>
+    <b>演示步骤（v1.6 全自动建档体验）：</b>
     <ol>
-      <li>把 <code>auto-learn.user.js</code> 粘贴到 F12 控制台回车（或 Tampermonkey 已启用自动注入）</li>
-      <li>点右侧按钮 👉 <button class="btn" id="demo-rule-btn">一键配置演示规则</button></li>
-      <li>点击右下角徽标，切到 <b>🚀 自动遍历</b> 模式（蓝青色徽标）</li>
-      <li>坐等观察：自动进课 → 播完自动关"课程评价"弹窗 → 自动点下一章节 → 课程播完自动返回列表 → 进下一门 → 全部完成 🎉</li>
+      <li>把 <code>auto-learn.user.js</code>（v1.6）粘贴到 F12 控制台回车，或确认 Tampermonkey 已更新并启用</li>
+      <li>点击下方按钮 👉 <button class="btn" id="traverse-btn">🚀 一键进入自动遍历</button>（或点右下角徽标切换到蓝青色）</li>
+      <li><b>什么都不用配</b>——脚本会自动扫描建档（下方状态条会显示「自动建档·草稿」）并开始跑：自动进课 → 播完自动关"课程评价"弹窗 → 自动切下一章节 → 课程播完自动返回列表 → 进下一门 → 全部完成 🎉</li>
       <li>播放中切到别的标签页 10 秒再回来：视频没被暂停（防暂停）</li>
+      <li>控制台看学习记录：<code>__autoLearn.report()</code> 日报/周报；出问题时 <code>__autoLearn.diagnose()</code> 诊断报告</li>
     </ol>
-    <div style="color:#9fb6c9;">本页模拟了真实平台的三个特征：切标签页暂停视频（visibilitychange）、每集结束弹"课程评价"、无下一集自动连播入口。</div>
+    <div id="demo-status" style="margin-top:10px;padding:8px 10px;background:#0b1420;border:1px solid #2c4a63;border-radius:6px;color:#8fe3a8;font-size:12px;font-family:Consolas,monospace;">等待脚本注入…</div>
+    <div style="color:#9fb6c9;margin-top:8px;">本页模拟真实平台的三个特征：切标签页暂停视频（visibilitychange）、每集结束弹"课程评价"、无自动连播入口（需点"下一课"/章节切换）。</div>
   </div>
 </div>
 
@@ -232,6 +233,25 @@ function loadDemoRule() {
   alert(res);
 }
 document.getElementById('demo-rule-btn').addEventListener('click', loadDemoRule);
+
+/* 一键进入自动遍历模式 */
+document.getElementById('traverse-btn').addEventListener('click', () => {
+  if (!window.__autoLearn) { alert('未检测到脚本：请先把 v1.6 脚本粘贴到 F12 控制台（或确认 Tampermonkey 已更新）'); return; }
+  alert(window.__autoLearn.setMode('traverse'));
+});
+
+/* 实时状态条：随时查看脚本的规则/模式/动作（列表页徽标尚未出现时也能看） */
+setInterval(() => {
+  const box = document.getElementById('demo-status');
+  if (!box) return;
+  try {
+    const api = window.__autoLearn;
+    if (!api || !api._t) { box.textContent = '等待脚本注入…（粘贴脚本后自动出现）'; return; }
+    const r = api._t.getRule();
+    const ruleName = r ? ('[' + r.name + (r.draft ? '·草稿' : '') + ']') : '[无规则]';
+    box.textContent = '规则：' + ruleName + ' ｜ 模式：' + api.getMode() + ' ｜ ' + api._t.status();
+  } catch (e) { box.textContent = '状态读取失败：' + e.message; }
+}, 500);
 </script>
 </body>
 </html>
