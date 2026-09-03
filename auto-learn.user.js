@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习系统自动播放（规则驱动版）
 // @namespace    local.auto-learn
-// @version      1.7.0
+// @version      1.7.1
 // @description  防暂停 + 自动续播 + 自动切下一集 + 多门课遍历 + 录制向导 + 全自动建档 + 学习记录
 // @author       you
 // @match        *://*/*
@@ -1509,6 +1509,7 @@
       e.returnValue = '学习助手运行中：如需离开请点"离开"，否则请点"取消"留在本页继续自动播放。';
     });
   }
+  logTrace('==== 新会话 ====');
   logTrace('boot: 注入成功 rule=' + RULE.name + (RULE.draft ? '(draft)' : '') + ' mode=' + mode + ' stealth=' + STEALTH + ' diag=' + DIAG);
   if (DIAG) {
     try {
