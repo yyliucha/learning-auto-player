@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习系统自动播放（规则驱动版）
 // @namespace    local.auto-learn
-// @version      1.6.5
+// @version      1.6.6
 // @description  防暂停 + 自动续播 + 自动切下一集 + 多门课遍历 + 录制向导 + 全自动建档 + 学习记录
 // @author       you
 // @match        *://*/*
@@ -364,7 +364,7 @@
   /* ---------------- 全局配置 ---------------- */
   const CFG = {
     resumeMs: 8000,          // 每隔多久强制检查一次播放状态
-    fakeActivityMs: 25000,   // 每隔多久伪造一次鼠标/键盘活动
+    fakeActivityMs: 5000,    // 伪活动频率：防挂机平台检测窗口普遍 ≤10 秒，必须高频
     resumeTexts: ['继续播放', '点击继续', '恢复播放', '继续学习']  // "已暂停"遮罩
   };
 
@@ -601,14 +601,23 @@
     badge.textContent = modePrefix() + '[' + name + '] ' + lastAction + extra;
   }
 
-  /* 5. 伪造"人还在"的活动信号 */
+  /* 5. 伪造"人还在"的活动信号（高频轮换事件类型，模拟真人微动作） */
   function fakeActivity() {
-    const x = 50 + Math.random() * (window.innerWidth - 100);
-    const y = 50 + Math.random() * (window.innerHeight - 100);
-    const evt = new MouseEvent('mousemove', { bubbles: true, clientX: x, clientY: y, view: window });
-    document.dispatchEvent(evt);
-    window.dispatchEvent(evt);
-    document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Shift' }));
+    try {
+      const x = 50 + Math.random() * (window.innerWidth - 100);
+      const y = 50 + Math.random() * (window.innerHeight - 100);
+      const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y };
+      document.dispatchEvent(new MouseEvent('mousemove', opts));
+      window.dispatchEvent(new MouseEvent('mousemove', opts));
+      if (Math.random() < 0.5) {
+        try {
+          document.dispatchEvent(new PointerEvent('pointermove', Object.assign({ pointerId: 1 }, opts)));
+        } catch (e) {}
+      }
+      if (Math.random() < 0.3) {
+        document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Shift' }));
+      }
+    } catch (e) {}
   }
 
   /* 6. 一集结束 → 关弹窗 + 点"下一项"（核心流程，规则驱动） */
