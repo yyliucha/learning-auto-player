@@ -414,6 +414,20 @@ async function playVideoInPage(page) {
 async function runLearnin(context, page, limit) {
   let processed = 0;
   const skipped = new Set();
+
+  /* ① 课前签到（点总览页"立即签到"，可重复执行，已签到则跳过） */
+  try {
+    const signed = await page.evaluate(() => {
+      const el = document.querySelector('.sign-in-label');
+      if (!el) return '无签到入口';
+      if ((el.textContent || '').indexOf('立即签到') === -1) return '已签到';
+      el.click();
+      return '已点击签到';
+    });
+    console.log('[learnin] 签到：' + signed);
+    await sleep(1500);
+  } catch (e) { console.log('[learnin] 签到处理跳过：' + e.message); }
+
   while (processed < limit) {
     const sections = await page.evaluate(() => {
       const out = [];
