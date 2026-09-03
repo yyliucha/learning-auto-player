@@ -1,8 +1,8 @@
 {
   "name": "learning-auto-player",
-  "version": "1.6.0",
+  "version": "1.7.2",
   "private": true,
-  "description": "学习系统自动播放：防暂停 + 自动续播 + 自动切下一集 + 多门课遍历",
+  "description": "学习系统自动播放器：防暂停、自动续播、自动签到、播完自动切下一集、自动跳过已完成、多门课自动遍历。书签注入 + 本地真实浏览器播放器双路径，纯前端零后端。",
   "scripts": {
     "test": "node test/harness.js",
     "player": "node playwright/auto-learn.js"

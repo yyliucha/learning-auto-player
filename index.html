@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="学习系统自动播放器：防暂停、自动续播、播完自动切下一集、多门课自动遍历。书签一键注入 + 本地真实浏览器播放器双路径。纯前端，数据全在你本地浏览器。">
 <title>Learning Auto Player · 学习系统自动播放器</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -28,29 +29,24 @@
 <body>
 <div class="wrap">
   <h1>📚 Learning Auto Player</h1>
-  <div class="sub">学习系统自动播放器 —— 防暂停 · 自动续播 · 播完自动切下一集 · 多门课自动遍历 · 纯前端 · 数据全在你本地浏览器</div>
+  <div class="sub">学习系统自动播放器 —— 防暂停 · 自动续播 · 自动签到 · 播完自动切下一集 · 自动跳过已完成课程 · 多门课自动遍历 · 纯前端 · 数据全在你本地浏览器</div>
 
   <div class="card">
     <h2>第 1 步 · 把播放器放入浏览器（只需一次）</h2>
     <div>
       <a class="bm" id="bm-single" href="#" draggable="true" style="opacity:.5;pointer-events:none;">⏳ 单课连播 · 生成中…（等 1 秒转绿再拖）</a>
       <a class="bm" id="bm-traverse" href="#" draggable="true" style="opacity:.5;pointer-events:none;">⏳ 自动遍历 · 生成中…</a>
-      <a class="bm" id="bm-stealth" href="#" draggable="true" style="opacity:.5;pointer-events:none;background:#5a4633;">⏳ 隐身极简 · 生成中…</a>
-      <a class="bm" id="bm-diag" href="#" draggable="true" style="opacity:.5;pointer-events:none;background:#5a3c46;">⏳ 诊断版 · 生成中…</a>
       <button class="copy" id="copy-btn">📋 复制书签地址（手动建书签用）</button>
     </div>
-    <div style="margin-top:8px;">
-      <a class="bm" style="background:#37475b;" id="bm-diag" href="javascript:(function(){try{var raw=localStorage.getItem('autoLearn.trace.'+location.hostname);var arr=raw?JSON.parse(raw):[];var last=-1;for(var i=arr.length-1;i>=0;i--){if(arr[i].indexOf('====')===0){last=i;break;}}var show=last>=0?arr.slice(last):arr;var msg='追踪日志（'+location.hostname+'·仅最近一次运行）：\n\n'+show.join('\n');if(window.__autoLearn){try{var sc=JSON.parse(window.__autoLearn.scan());msg+='\n\n扫描：候选='+((sc.listCandidates||[]).map(function(c){return c.childSig+'x'+c.childCount}).join('、')||'无')}catch(e){}}alert(msg)}catch(e){alert('读取失败')}})();" draggable="true">🔍 诊断 · 也拖进书签栏（排查用）</a>
-    </div>
-    <div class="hint"><b>排查小贴士</b>：如果点 ▶ 后页面被异常关闭，回到该页面再点 🔍 诊断，把弹出的日志发我，就能看到关闭前脚本最后在干什么。</div>
     <div class="hint">
       <b>拖拽法</b>：等按钮变绿（文字变为"拖我进书签栏"）再拖到书签栏；<br>
       <b>右键法</b>：右键绿色按钮 → 添加到书签/收藏（Chrome 右键后看不到链接时用拖拽法）；<br>
       <b>复制法</b>：点「📋 复制」→ 浏览器里新建书签，地址粘贴进去。<br>
       <b>自检</b>：右键书签 → 编辑 → 地址必须是 <code>javascript:</code> 开头；如果看到 <code>https://…#</code>，说明拖的是生成中的占位链接，删掉按上述方法重来（等按钮变绿）。<br>
-      <b>🕶 隐身极简</b>：不显示提示条/徽标/确认框（痕迹最小），适合有防注入安全扫描的平台（如网梯 whaty）；无任何界面反馈，成功与否看 F12 控制台的 <code>[auto-learn]</code> 日志。<br>
-      <b>🔬 诊断版</b>：全程毫秒级日志存本地（localStorage），适合"页面被平台关闭"的取证——点它 → 等页面关闭 → 重开页面 → 点 🔍 诊断 → 把弹出内容发我。
+      <b>书签介绍</b>：▶ 单课连播 = 手动打开一门课，内部自动连播；🚀 自动遍历 = 从课程列表开始，自动刷掉所有未完成课程（已完成的自动跳过）。<br>
+      <b>版本更新</b>：书签已内置完整脚本，一次添加永久有效；发布新版本后重新拖一次即可更新。
     </div>
+    <div class="hint">⚠️ <b>个别平台（如网梯 whaty 系）会检测到脚本注入并直接关闭页面</b>，书签在这种平台可能无效 —— 不用折腾排查，这种情况直接改用下方 <b>第 3 步 · 本地网址播放器</b>（真实浏览器，无注入，已验证可靠）。</div>
   </div>
 
   <div class="card">
@@ -61,20 +57,20 @@
     <div class="step">2️⃣ 点击书签栏里的 <b>▶ 播放</b>（或 🚀 遍历）——页面下方会出现绿色提示条「✅ 自动播放已注入」</div>
     <div class="step">3️⃣ 自动建档 → 自动进课 → 播完自动关弹窗 → 自动切下一集 → 全部完成 🎉 右下角徽标可暂停/切模式</div>
     <div class="step">✅ <b>不确定？先测试：</b>先点本页的 <a class="demo-link" href="https://yyliucha.github.io/learning-auto-player/demo/" target="_blank">打开演示平台 →</a> 等 30 秒看它自动跑完，再回自己的平台用同款操作。</div>
-    <div class="hint">▶ 单课连播 = 你手动打开一门课，内部自动连播；🚀 自动遍历 = 从课程列表开始，自动刷掉所有未完成课程。点击书签后如果提示条没出现，说明该平台禁止外部脚本（少见），可改用本地 start.bat。</div>
+    <div class="hint">点击书签后如果提示条没出现，说明该平台禁止外部脚本（网梯 whaty 等平台常见，页面可能还会被关闭）→ 直接改用第 3 步的本地网址播放器。</div>
   </div>
 
   <div class="card">
     <h2>第 3 步 · 备选方式</h2>
-    <div class="step">· <b>Tampermonkey</b>：装扩展后粘贴 <code>auto-learn.user.js</code>（打开平台即自动运行，无需点书签）</div>
-    <div class="step">· <b>本地网址播放器</b>：<code>playwright/start.bat</code> 输入网址，真实浏览器自动播放（用于有 isTrusted/心跳检测的硬平台）</div>
-    <div class="step">· <b>先看看效果</b>：<a class="demo-link" href="./demo/" target="_blank">打开本地演示平台 →</a>（模拟真实平台特征，自动跑完给你看）</div>
+    <div class="step">· <b>本地网址播放器（硬平台首选，傻瓜式）</b>：双击 <code>playwright/start.bat</code> → 粘贴课程/总览网址 → 真实浏览器自动打开、自动签到、自动跳过已完成课程、自动播完所有未完成视频。对付"书签一注入就关页"的学校/企业平台（如网梯 whaty）。</div>
+    <div class="step">· <b>Tampermonkey</b>：装扩展后粘贴 <code>auto-learn.user.js</code>（打开平台即自动运行，无需点书签；个别平台环境限制下不会执行，此时用本地网址播放器）</div>
   </div>
 
   <div class="card">
     <h2>❓ 常见问题</h2>
     <div class="step">· <b>隐私</b>：网站只是"脚本发放站"，一切运行都在你自己的浏览器里，你的账号、进度、数据不上传任何服务器</div>
     <div class="step">· <b>为什么不能"我替你跑"</b>：需要登你账号的播放必须在你的浏览器里进行；把账号交给服务器有风险，且服务器 IP 会被平台识别</div>
+    <div class="step">· <b>已完成的不重复播</b>：遍历时按平台"完成状态"判定，已学完的视频/课程自动跳过，只播未完成的</div>
     <div class="step">· <b>首次适配</b>：常见平台打开即用；个别平台结构特殊会自动回退通用模式，把右下角徽标文字发我即可</div>
     <div class="step">· <b>合规</b>：仅供个人学习使用，请确认符合所在平台的使用规范</div>
   </div>
@@ -86,57 +82,35 @@
 <script>
 (function () {
   'use strict';
-  var origin = location.origin;
 
   /* 全量内嵌式书签：把 auto-learn.user.js 完整编入书签地址，零外部加载，
      绕过目标平台的 CSP 外部脚本限制（学校/企业系统常见）
      用 try/catch 包裹 + 以 void 0 结尾：保证执行结果恒为 undefined，
      杜绝 javascript: 书签被浏览器当作"跳转"把页面替换/关闭的一切可能 */
-  function buildBookmark(code, mode, flag) {
+  function buildBookmark(code, mode) {
     var tail = mode === 'traverse'
       ? "setTimeout(function(){try{window.__autoLearn.setMode('traverse')}catch(e){}},1500);"
       : '';
-    var pre = '';
-    if (flag === 'DIAG') {
-      pre = "alert('🔬 诊断版已启动：正在记录毫秒级日志…\n页面被关闭后，重开此页读取即可');" +
-        "try{Object.defineProperty(window,'__AL_DIAG__',{value:1,configurable:true});}catch(e){window.__AL_DIAG__=1;}";
-    } else if (flag === 'STEALTH') {
-      pre = "try{Object.defineProperty(window,'__AL_STEALTH__',{value:1,configurable:true});}catch(e){window.__AL_STEALTH__=1;}";
-    }
-    var wrapped = "(function(){" + pre + "try{" + code + "\n" + tail +
+    var wrapped = "(function(){try{" + code + "\n" + tail +
       "}catch(e){alert('自动播放脚本出错：'+e.message)}void 0;})();";
     return 'javascript:' + encodeURIComponent(wrapped);
   }
 
   var bmSingle = '';
   var bmTraverse = '';
-  var bmStealth = '';
-  var bmDiag = '';
   fetch('auto-learn.user.js').then(function (r) { return r.text(); }).then(function (code) {
-    bmSingle = buildBookmark(code, 'single', '');
-    bmTraverse = buildBookmark(code, 'traverse', '');
-    bmStealth = buildBookmark(code, 'single', 'STEALTH');
-    bmDiag = buildBookmark(code, 'single', 'DIAG');
+    bmSingle = buildBookmark(code, 'single');
+    bmTraverse = buildBookmark(code, 'traverse');
     var a1 = document.getElementById('bm-single');
     var a2 = document.getElementById('bm-traverse');
-    var a3 = document.getElementById('bm-stealth');
-    var a4 = document.getElementById('bm-diag');
     a1.href = bmSingle;
     a2.href = bmTraverse;
-    a3.href = bmStealth;
-    a4.href = bmDiag;
     a1.style.opacity = '1';
     a2.style.opacity = '1';
-    a3.style.opacity = '1';
-    a4.style.opacity = '1';
     a1.style.pointerEvents = 'auto';
     a2.style.pointerEvents = 'auto';
-    a3.style.pointerEvents = 'auto';
-    a4.style.pointerEvents = 'auto';
     a1.textContent = '▶ 单课连播 · 拖我进书签栏';
     a2.textContent = '🚀 自动遍历 · 拖我进书签栏';
-    a3.textContent = '🕶 隐身极简 · 拖我进书签栏';
-    a4.textContent = '🔬 诊断版 · 拖我进书签栏';
     var m = code.match(/@version\s+([\d.]+)/);
     document.getElementById('ver').textContent = '脚本版本：v' + (m ? m[1] : '?') + ' · 书签已内置完整脚本（约 60KB，一次添加永久有效；发布新版本后重新拖一次即可更新）';
   }).catch(function () {
