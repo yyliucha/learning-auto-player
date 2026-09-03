@@ -689,5 +689,16 @@ test('学习记录：完成视频入统计 + report() 日报', () => {
   assert.ok(String(rep).includes('今日：1 集'), '日报应显示今日完成');
 });
 
+/* 场景 7：v1.6.2 追踪日志 */
+test('trace：logTrace 记录 + trace() 读取', () => {
+  const F = loadScript();
+  const t7 = F.win.__autoLearn._t;
+  t7.logTrace('测试记录A');
+  const api = F.win.__autoLearn;
+  const t = api.trace();
+  assert.ok(String(t).includes('测试记录A'), 'trace() 应能读到记录');
+  assert.ok(String(t).includes('boot'), '启动时应有 boot 记录');
+});
+
 console.log('\n结果：' + passed + ' 通过，' + failed + ' 失败');
 if (failed > 0) process.exit(1);

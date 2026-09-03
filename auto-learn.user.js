@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习系统自动播放（规则驱动版）
 // @namespace    local.auto-learn
-// @version      1.6.1
+// @version      1.6.2
 // @description  防暂停 + 自动续播 + 自动切下一集 + 多门课遍历 + 录制向导 + 全自动建档 + 学习记录
 // @author       you
 // @match        *://*/*
@@ -519,6 +519,19 @@
     if (!isFinite(s) || s < 0) return '--:--';
     s = Math.floor(s);
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  /* ---------------- 追踪日志（排查"页面被关闭"等环境问题时看最后动作） ---------------- */
+  const TRACE_KEY = 'autoLearn.trace.' + location.hostname;
+
+  function logTrace(msg) {
+    try {
+      let arr = [];
+      try { arr = JSON.parse(localStorage.getItem(TRACE_KEY) || '[]'); } catch (e) {}
+      arr.push(new Date().toLocaleTimeString() + ' ' + msg);
+      if (arr.length > 60) arr = arr.slice(-60);
+      localStorage.setItem(TRACE_KEY, JSON.stringify(arr));
+    } catch (e) {}
   }
 
   /* 4. 注入提示条（书签/控制台使用时第一时间给反馈，任何页面都可见） */
@@ -1341,6 +1354,10 @@
     },
     report: () => buildReport(),
     diagnose: () => buildDiagnose(),
+    trace: arg => {
+      if (arg === 'clear') { try { localStorage.removeItem(TRACE_KEY); } catch (e) {} return '已清空追踪日志'; }
+      try { return JSON.parse(localStorage.getItem(TRACE_KEY) || '[]').join('\n') || '（暂无记录）'; } catch (e) { return '（读取失败）'; }
+    },
     clearStats: () => {
       try { localStorage.removeItem(STATS_KEY); } catch (e) {}
       return '已清空本域学习记录';
@@ -1393,6 +1410,7 @@
     assignRole, generateRule,
     setMode, tick, startNextFlow, handleCourseFinished,
     maybeAutoDraft, promoteDraft, fallbackToGeneric, recordStat, loadStats, getTodayStats,
+    logTrace,
     getRule: () => JSON.parse(JSON.stringify(RULE)),
     status: () => lastAction
   };
@@ -1402,7 +1420,11 @@
   setInterval(fakeActivity, CFG.fakeActivityMs);
   setInterval(tick, CFG.resumeMs);
   document.addEventListener('DOMContentLoaded', makeBadge);
-  showToast('✅ 自动播放 v1.6 已注入 — 这是学习平台将自动开始；普通页面无动作。右下角徽标可暂停/切模式。');
+  showToast('✅ 学习助手已加载（v1.6）— 是学习平台将自动开始；普通页面无动作。右下角徽标可暂停/切模式。');
+  logTrace('boot: 注入成功 rule=' + RULE.name + (RULE.draft ? '(draft)' : '') + ' mode=' + mode);
+  ['beforeunload', 'pagehide', 'unload'].forEach(et => {
+    window.addEventListener(et, () => logTrace('PAGE-CLOSING: ' + et + ' 触发（页面正在关闭/跳转）'));
+  });
   console.log('[auto-learn v1.6] 已注入。当前域名规则：' + RULE.name + (RULE.draft ? '（草稿）' : '') +
     '，模式：' + mode + '（控制台输入 __autoLearn.help() 查看命令）');
 })();
