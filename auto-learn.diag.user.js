@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         学习系统自动播放（规则驱动版）
+// @name         学习系统自动播放（诊断版）
 // @namespace    local.auto-learn
 // @version      1.7.1
-// @description  防暂停 + 自动续播 + 自动切下一集 + 多门课遍历 + 录制向导 + 全自动建档 + 学习记录
+// @description  诊断版（TM 用）：内置日志模式，页面被平台关闭后重开页面可 __autoLearn.trace() 读取原因
 // @author       you
 // @match        *://*/*
 // @run-at       document-start
@@ -70,7 +70,7 @@
    *     （页面被平台关掉后，重开页面在控制台执行 __autoLearn.trace() 找回）
    * ============================================================ */
   let __AL_CONFIG_STEALTH = false;
-  let __AL_CONFIG_DIAG = false;
+  let __AL_CONFIG_DIAG = true;
 
   if (window.__AUTO_LEARN__) return;
   try {
