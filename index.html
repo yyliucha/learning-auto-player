@@ -38,7 +38,7 @@
       <button class="copy" id="copy-btn">📋 复制书签地址（手动建书签用）</button>
     </div>
     <div style="margin-top:8px;">
-      <a class="bm" style="background:#37475b;" id="bm-diag" href="javascript:(function(){try{var raw=localStorage.getItem('autoLearn.trace.'+location.hostname);alert('追踪日志（'+location.hostname+'）：\n\n'+(raw?JSON.parse(raw).join('\n'):'（无记录，请先在该平台页面点一次 ▶ 再查看）'))}catch(e){alert('读取失败')}})();" draggable="true">🔍 诊断 · 也拖进书签栏（排查用）</a>
+      <a class="bm" style="background:#37475b;" id="bm-diag" href="javascript:(function(){try{var raw=localStorage.getItem('autoLearn.trace.'+location.hostname);var msg='追踪日志（'+location.hostname+'）：\n\n'+(raw?JSON.parse(raw).join('\n'):'（无记录，请先在该平台页面点一次 ▶ 再查看）');if(window.__autoLearn){try{var sc=JSON.parse(window.__autoLearn.scan());msg+='\n\n页面扫描：视频='+sc.videos+' 候选列表='+((sc.listCandidates||[]).map(function(c){return c.childSig+'x'+c.childCount}).join('、')||'无')}catch(e){}}alert(msg)}catch(e){alert('读取失败')}})();" draggable="true">🔍 诊断 · 也拖进书签栏（排查用）</a>
     </div>
     <div class="hint"><b>排查小贴士</b>：如果点 ▶ 后页面被异常关闭，回到该页面再点 🔍 诊断，把弹出的日志发我，就能看到关闭前脚本最后在干什么。</div>
     <div class="hint">

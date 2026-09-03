@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习系统自动播放（规则驱动版）
 // @namespace    local.auto-learn
-// @version      1.6.2
+// @version      1.6.3
 // @description  防暂停 + 自动续播 + 自动切下一集 + 多门课遍历 + 录制向导 + 全自动建档 + 学习记录
 // @author       you
 // @match        *://*/*
@@ -1424,6 +1424,13 @@
   logTrace('boot: 注入成功 rule=' + RULE.name + (RULE.draft ? '(draft)' : '') + ' mode=' + mode);
   ['beforeunload', 'pagehide', 'unload'].forEach(et => {
     window.addEventListener(et, () => logTrace('PAGE-CLOSING: ' + et + ' 触发（页面正在关闭/跳转）'));
+  });
+  /* v1.6.3 离开守卫：平台试图静默关闭/跳转时弹原生态确认框，
+     用户点"取消"即留在本页继续自动播放；每次拦截都会记录日志 */
+  window.addEventListener('beforeunload', function (e) {
+    logTrace('leave-guard: 检测到关闭/跳转企图，已弹确认框（选"取消"可留下）');
+    e.preventDefault();
+    e.returnValue = '学习助手运行中：如需离开请点"离开"，否则请点"取消"留在本页继续自动播放。';
   });
   console.log('[auto-learn v1.6] 已注入。当前域名规则：' + RULE.name + (RULE.draft ? '（草稿）' : '') +
     '，模式：' + mode + '（控制台输入 __autoLearn.help() 查看命令）');
