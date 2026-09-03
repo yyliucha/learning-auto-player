@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习系统自动播放（规则驱动版）
 // @namespace    local.auto-learn
-// @version      1.6.8
+// @version      1.6.9
 // @description  防暂停 + 自动续播 + 自动切下一集 + 多门课遍历 + 录制向导 + 全自动建档 + 学习记录
 // @author       you
 // @match        *://*/*
@@ -65,6 +65,7 @@
     Object.defineProperty(window, '__AUTO_LEARN__', { value: true, writable: true, configurable: true });
   } catch (e) { window.__AUTO_LEARN__ = true; }
   const STEALTH = !!window.__AL_STEALTH__;   // 隐身极简模式：无提示条/徽标/离开守卫/伪活动（最小痕迹）
+  const DIAG = !!window.__AL_DIAG__;         // 诊断模式：毫秒级本地日志（存 localStorage，页面被关也能取回）
 
   /* ---------------- 内置规则库 ---------------- */
   /* 示例规则（example.com）仅供参考：改成你自己的域名，或直接用录制向导 /
@@ -551,15 +552,16 @@
   const TRACE_KEY = 'autoLearn.trace.' + location.hostname;
 
   function logTrace(msg) {
-    if (STEALTH) {   // 隐身模式：不写 localStorage（平台可能监控存储键）
+    if (STEALTH && !DIAG) {   // 隐身模式：不写 localStorage（平台可能监控存储键）
       try { console.log('[al] ' + msg); } catch (e) {}
       return;
     }
     try {
       let arr = [];
       try { arr = JSON.parse(localStorage.getItem(TRACE_KEY) || '[]'); } catch (e) {}
-      arr.push(new Date().toLocaleTimeString() + ' ' + msg);
-      if (arr.length > 60) arr = arr.slice(-60);
+      const ms = (Math.round(performance.now()) / 1000).toFixed(1) + 's';
+      arr.push(ms + ' ' + msg);
+      if (arr.length > 200) arr = arr.slice(-200);
       localStorage.setItem(TRACE_KEY, JSON.stringify(arr));
     } catch (e) {}
   }
@@ -767,6 +769,10 @@
 
     const v = findVideo();
     if (v) sawVideo = true;
+    if (DIAG) {
+      logTrace('tick: video=' + (v ? ('paused=' + v.paused + ' ended=' + v.ended + ' t=' + Math.round(v.currentTime * 10) / 10) : '无') +
+        ' mode=' + mode + ' draft=' + RULE.draft);
+    }
 
     if (mode !== 'off' && !wizardOpen) {
       let triggered = false;   // 本轮是否触发了切换流程（触发时保留触发状态文案）
@@ -1481,6 +1487,8 @@
   document.addEventListener('DOMContentLoaded', makeBadge);
   if (!STEALTH) {
     showToast('✅ 学习助手已加载（v1.6）— 是学习平台将自动开始；普通页面无动作。右下角徽标可暂停/切模式。');
+  }
+  if (!STEALTH && !DIAG) {
     /* v1.6.3 离开守卫：平台试图静默关闭/跳转时弹原生态确认框，
        用户点"取消"即留在本页继续自动播放；每次拦截都会记录日志 */
     window.addEventListener('beforeunload', function (e) {
@@ -1488,6 +1496,17 @@
       e.preventDefault();
       e.returnValue = '学习助手运行中：如需离开请点"离开"，否则请点"取消"留在本页继续自动播放。';
     });
+  }
+  logTrace('boot: 注入成功 rule=' + RULE.name + (RULE.draft ? '(draft)' : '') + ' mode=' + mode + ' stealth=' + STEALTH + ' diag=' + DIAG);
+  if (DIAG) {
+    try {
+      const scripts = Array.from(document.querySelectorAll('script[src]')).slice(0, 30)
+        .map(s => (s.getAttribute('src') || '').split('/').pop()).join(',');
+      logTrace('diag: scripts=[' + scripts + ']');
+      logTrace('diag: videos=' + document.querySelectorAll('video').length +
+        ' iframes=' + document.querySelectorAll('iframe').length +
+        ' keys(window)=' + Object.keys(window).length);
+    } catch (e) {}
   }
   logTrace('boot: 注入成功 rule=' + RULE.name + (RULE.draft ? '(draft)' : '') + ' mode=' + mode + ' stealth=' + STEALTH);
   ['beforeunload', 'pagehide', 'unload'].forEach(et => {
