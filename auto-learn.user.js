@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习系统自动播放（规则驱动版）
 // @namespace    local.auto-learn
-// @version      1.6.7
+// @version      1.6.8
 // @description  防暂停 + 自动续播 + 自动切下一集 + 多门课遍历 + 录制向导 + 全自动建档 + 学习记录
 // @author       you
 // @match        *://*/*
@@ -201,6 +201,7 @@
   }
 
   function recordStat(type, detail, seconds) {
+    if (STEALTH) return;   // 隐身模式：不写任何存储
     const s = loadStats();
     const day = todayKey();
     const d = s.days[day] || { videos: 0, seconds: 0 };
@@ -260,6 +261,7 @@
 
   /* 自动建档：无规则/无内置的域名，扫描页面生成草稿规则（可多次合并） */
   function maybeAutoDraft() {
+    if (STEALTH) return false;   // 隐身模式：跳过自动建档（避免写 localStorage）
     if (!document.body) return false;
     const host = location.hostname;
     let stored = null;
@@ -326,7 +328,7 @@
 
   /* 草稿转正：运行验证通过后去掉草稿标记 */
   function promoteDraft() {
-    if (!RULE.draft) return;
+    if (STEALTH || !RULE.draft) return;
     const clean = JSON.parse(JSON.stringify(RULE));
     delete clean.draft;
     try { localStorage.setItem(PREFIX + location.hostname, JSON.stringify(clean)); } catch (e) {}
@@ -549,6 +551,10 @@
   const TRACE_KEY = 'autoLearn.trace.' + location.hostname;
 
   function logTrace(msg) {
+    if (STEALTH) {   // 隐身模式：不写 localStorage（平台可能监控存储键）
+      try { console.log('[al] ' + msg); } catch (e) {}
+      return;
+    }
     try {
       let arr = [];
       try { arr = JSON.parse(localStorage.getItem(TRACE_KEY) || '[]'); } catch (e) {}
@@ -824,8 +830,8 @@
       }
     }
 
-    /* 7.5 自动遍历调度：列表页 → 进课；视频页 → 正常连播（播完由 handleCourseFinished 返回） */
-    if (mode === 'traverse' && !wizardOpen) {
+    /* 7.5 自动遍历调度：列表页 → 进课；视频页 → 正常连播（隐身模式禁用，避免写 sessionStorage） */
+    if (mode === 'traverse' && !STEALTH && !wizardOpen) {
       const r = RULE.courseListPage;
       if (r && r.courseItemSelector) {
         if (!v) {

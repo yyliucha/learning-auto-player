@@ -94,7 +94,9 @@
     var tail = mode === 'traverse'
       ? "setTimeout(function(){try{window.__autoLearn.setMode('traverse')}catch(e){}},1500);"
       : '';
-    var pre = stealth ? "window.__AL_STEALTH__=1;" : '';
+    var pre = stealth
+      ? "try{Object.defineProperty(window,'__AL_STEALTH__',{value:1,configurable:true});}catch(e){window.__AL_STEALTH__=1;}"
+      : '';
     var wrapped = "(function(){" + pre + "try{" + code + "\n" + tail +
       "}catch(e){alert('自动播放脚本出错：'+e.message)}void 0;})();";
     return 'javascript:' + encodeURIComponent(wrapped);
