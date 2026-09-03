@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习系统自动播放（规则驱动版）
 // @namespace    local.auto-learn
-// @version      1.6.4
+// @version      1.6.5
 // @description  防暂停 + 自动续播 + 自动切下一集 + 多门课遍历 + 录制向导 + 全自动建档 + 学习记录
 // @author       you
 // @match        *://*/*
@@ -615,6 +615,7 @@
   function startNextFlow() {
     if (flowRunning || mode === 'off' || wizardOpen) return;
     flowRunning = true;
+    logTrace('flow: 开始切换（上一集已结束）');
 
     const startV = findVideo();
     const startT = (startV && isFinite(startV.currentTime) && startV.currentTime > 0)
@@ -634,6 +635,7 @@
         flowRunning = false;
         recordStat('video', '完成一集', startT > 0 ? startT : 0);   // 学习记录
         promoteDraft();                                             // 草稿规则运行验证通过 → 转正
+        logTrace('flow: 成功 — 已自动进入下一集');
         lastAction = '已自动进入下一集';
         updateBadge();
         return;
@@ -643,6 +645,7 @@
         clearInterval(timer);
         flowRunning = false;
         const fb = fallbackToGeneric('切换超时（40 秒无新视频）');
+        logTrace('flow: 超时无新视频（回退=' + fb + '）');
         lastAction = '自动切换失败' + (fb ? '，草稿规则已回退通用模式（__autoLearn.diagnose() 看原因）' : '，请瞄一眼页面');
         updateBadge();
         return;
@@ -667,6 +670,8 @@
           clickEl(entry);
           waiting = true;
           idleRounds = 0;
+          const name = (entry.innerText || '').trim().slice(0, 10);
+          logTrace('flow: 已点击下一项「' + name + '」（章节=' + !!chapter + '）');
           if (chapter) {
             const nameSel = RULE.videoPage.next.nameSelector;
             const nameEl = nameSel ? chapter.querySelector(nameSel) : null;
@@ -679,6 +684,7 @@
           if (idleRounds >= 5) {   // 约 10 秒什么都没得点 → 本课程播完
             clearInterval(timer);
             flowRunning = false;
+            logTrace('flow: 无下一项（10 秒），按课程播完处理');
             handleCourseFinished();
             return;
           }
