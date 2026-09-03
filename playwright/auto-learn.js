@@ -367,6 +367,105 @@ async function waitLoggedIn(page) {
   throw new Error('等待登录超时（20 分钟）');
 }
 
+/* ================= learnin.com.cn（网梯 Whaty）专项流程 =================
+ * 课程总览页 → 扫描未完成小节（video-statistics 0/x）→ 点"开始学习"链接
+ * → 新窗口学习页：等视频 → 真实播放到结束 → 关窗 → 回到列表下一节
+ * 人脸认证弹窗出现时暂停并提示人工配合（摄像头必须是真人） */
+async function faceDialogVisible(page) {
+  try {
+    return page.evaluate(() => {
+      let vis = false;
+      document.querySelectorAll('.el-dialog__wrapper').forEach(d => {
+        if (d.style.display !== 'none' && (d.textContent || '').indexOf('人脸认证') !== -1) vis = true;
+      });
+      return vis;
+    });
+  } catch (e) { return false; }
+}
+
+async function playVideoInPage(page) {
+  // 等视频出现（学习页可能先弹人脸认证）
+  for (let i = 0; i < 20; i++) {
+    if (page.isClosed()) return false;
+    const st = await videoState(page, 'video');
+    if (st) break;
+    if (await faceDialogVisible(page)) {
+      console.log('[learnin] ⚠ 检测到人脸认证，请看向摄像头并手动点确认（最多等 3 分钟…）');
+      try {
+        await page.waitForFunction(() => {
+          let vis = false;
+          document.querySelectorAll('.el-dialog__wrapper').forEach(d => {
+            if (d.style.display !== 'none' && (d.textContent || '').indexOf('人脸认证') !== -1) vis = true;
+          });
+          return !vis;
+        }, null, { timeout: 180000 });
+        console.log('[learnin] ✅ 人脸认证已通过，继续…');
+      } catch (e) { console.log('[learnin] 人脸认证超时，跳过该小节'); return false; }
+    }
+    await sleep(2000);
+  }
+  if (page.isClosed()) return false;
+  await ensurePlaying(page, 'video');
+  const why = await waitVideoEnd(page, 'video', 30);
+  console.log('[learnin] 视频结束：' + why);
+  return why === 'ended' || why === 'stalled';
+}
+
+async function runLearnin(context, page, limit) {
+  let processed = 0;
+  const skipped = new Set();
+  while (processed < limit) {
+    const sections = await page.evaluate(() => {
+      const out = [];
+      document.querySelectorAll('.outline-overview-section-item-container').forEach(sec => {
+        const titleEl = sec.querySelector('.section-index-title');
+        const link = sec.querySelector('a.router-link-button-new');
+        const stats = sec.querySelector('.statistics-item.video-statistics');
+        const txt = stats ? (stats.textContent || '').replace(/\s/g, '') : '';
+        if (!link) return;
+        out.push({
+          title: titleEl ? titleEl.textContent.trim() : '（无标题）',
+          href: link.getAttribute('href') || '',
+          txt: txt,
+          incomplete: txt.indexOf('0/') === 0
+        });
+      });
+      return out;
+    });
+    const target = sections.find(s => s.incomplete && s.href && !skipped.has(s.href));
+    if (!target) {
+      console.log('[learnin] 没有可学习的未完成小节（可能还剩 PPT/教材/练习/作业，非视频课）🎉');
+      break;
+    }
+    console.log('[learnin] 开始学习：「' + target.title + '」（' + target.txt + '）');
+    let newPage = null;
+    const popupP = context.waitForEvent('page', { timeout: 15000 }).catch(() => null);
+    await page.evaluate(href => {
+      const a = document.querySelector('a[href="' + href + '"]');
+      if (a) a.click();
+    }, target.href);
+    newPage = await popupP;
+    if (!newPage) {
+      console.log('[learnin] 链接未打开新页面，跳过该小节');
+      skipped.add(target.href);
+      continue;
+    }
+    try { await newPage.waitForLoadState('domcontentloaded', { timeout: 30000 }); } catch (e) {}
+    const ok = await playVideoInPage(newPage);
+    if (ok) {
+      console.log('[learnin] ✅ 完成：「' + target.title + '」');
+      processed++;
+      await sleep(3000);
+    } else {
+      console.log('[learnin] ⚠ 未完成：「' + target.title + '」，跳过重试');
+      skipped.add(target.href);
+    }
+    try { await newPage.close(); } catch (e) {}
+    await sleep(2000);
+  }
+  console.log('[learnin] 本轮完成 ' + processed + ' 个小节。');
+}
+
 /* ---------------- 主流程 ---------------- */
 async function main() {
   const headless = hasArg('headless');
@@ -422,6 +521,16 @@ async function main() {
   let entered = 0;
   let courseName = null;
   let draftTry = 0;
+
+  /* learnin.com.cn（网梯 Whaty）专项：课程总览自动播放（--url 给课程总览页） */
+  if (host === 'www.learnin.com.cn' || host === 'learnin.com.cn') {
+    console.log('[learnin] 检测到网梯学习平台：进入"课程总览自动播放"模式（人脸认证出现时会提示你配合）');
+    await runLearnin(context, page, limit);
+    stopAntiIdle = true;
+    await browser.close();
+    console.log('[auto-learn] 完成。');
+    return;
+  }
 
   while (entered < limit) {
     /* 没有规则 → 现场扫描建档（最多重试 12 次 = 60 秒） */
