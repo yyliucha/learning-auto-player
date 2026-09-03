@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习系统自动播放（规则驱动版）
 // @namespace    local.auto-learn
-// @version      1.6.6
+// @version      1.6.7
 // @description  防暂停 + 自动续播 + 自动切下一集 + 多门课遍历 + 录制向导 + 全自动建档 + 学习记录
 // @author       you
 // @match        *://*/*
@@ -61,7 +61,10 @@
   'use strict';
 
   if (window.__AUTO_LEARN__) return;
-  window.__AUTO_LEARN__ = true;
+  try {
+    Object.defineProperty(window, '__AUTO_LEARN__', { value: true, writable: true, configurable: true });
+  } catch (e) { window.__AUTO_LEARN__ = true; }
+  const STEALTH = !!window.__AL_STEALTH__;   // 隐身极简模式：无提示条/徽标/离开守卫/伪活动（最小痕迹）
 
   /* ---------------- 内置规则库 ---------------- */
   /* 示例规则（example.com）仅供参考：改成你自己的域名，或直接用录制向导 /
@@ -414,13 +417,15 @@
   window.onblur = null;
 
   /* 2. 吞掉"切标签页/失焦/页面隐藏"事件，让站点收不到暂停信号
-        （只在 document-start 阶段生效，所以推荐方式 A） */
-  const _ael = EventTarget.prototype.addEventListener;
-  EventTarget.prototype.addEventListener = function (type, fn, opts) {
-    if (type === 'visibilitychange' || type === 'pagehide') return;
-    if (type === 'blur' && (this === window || this === document)) return;
-    return _ael.call(this, type, fn, opts);
-  };
+        （只在页面加载早期生效；书签注入时页面已加载完，跳过以减小痕迹） */
+  if (document.readyState === 'loading') {
+    const _ael = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function (type, fn, opts) {
+      if (type === 'visibilitychange' || type === 'pagehide') return;
+      if (type === 'blur' && (this === window || this === document)) return;
+      return _ael.call(this, type, fn, opts);
+    };
+  }
 
   /* 3. 小工具（全部由规则驱动） */
 
@@ -573,7 +578,7 @@
 
   /* 5. 状态徽标（右下角，点击循环切换模式） */
   function makeBadge() {
-    if (!document.body) return;
+    if (STEALTH || !document.body) return;   // 隐身模式不创建徽标（最小痕迹）
     badge = document.createElement('div');
     badge.id = 'auto-learn-badge';
     badge.style.cssText =
@@ -1347,7 +1352,7 @@
   }
 
   /* 9. 规则管理 API + 页面扫描助手（F12 控制台用） */
-  window.__autoLearn = {
+  const __api = {
     help: () => 'getRule() 查看规则 | saveRule({...}) 保存 | clearRule() 清除 | exportRules() 导出 | ' +
       'importRules(\'{...}\') 导入 | setMode(\'single|traverse|off\') 切模式 | scan() 扫页面 | ' +
       'wizard() 录制向导 | report() 学习日报 | diagnose() 诊断 | clearDone() 清完成记录 | clearStats() 清学习记录',
@@ -1446,7 +1451,7 @@
   };
 
   /* 9.5 内部调试接口（测试/排查用） */
-  window.__autoLearn._t = {
+  __api._t = {
     findVideo, findNextChapter, nextBySelector, findNextCourse, isCourseDone, courseKey,
     enterCourse, findBackButton,
     pickListItem, pickButton, cssOf, detectActiveClass, detectSkipClass,
@@ -1458,23 +1463,30 @@
     status: () => lastAction
   };
 
+  /* 9.8 全局对象设为"不可枚举"，避免被平台完整性扫描（Object.keys）发现 */
+  try {
+    Object.defineProperty(window, '__autoLearn', { value: __api, writable: true, configurable: true });
+  } catch (e) { window.__autoLearn = __api; }
+
   /* 10. 启动 */
   document.addEventListener('ended', onEnded, true); // 捕获阶段监听，站点拦不住
-  setInterval(fakeActivity, CFG.fakeActivityMs);
+  if (!STEALTH) setInterval(fakeActivity, CFG.fakeActivityMs);   // 隐身模式不伪造活动（平台不查挂机）
   setInterval(tick, CFG.resumeMs);
   document.addEventListener('DOMContentLoaded', makeBadge);
-  showToast('✅ 学习助手已加载（v1.6）— 是学习平台将自动开始；普通页面无动作。右下角徽标可暂停/切模式。');
-  logTrace('boot: 注入成功 rule=' + RULE.name + (RULE.draft ? '(draft)' : '') + ' mode=' + mode);
+  if (!STEALTH) {
+    showToast('✅ 学习助手已加载（v1.6）— 是学习平台将自动开始；普通页面无动作。右下角徽标可暂停/切模式。');
+    /* v1.6.3 离开守卫：平台试图静默关闭/跳转时弹原生态确认框，
+       用户点"取消"即留在本页继续自动播放；每次拦截都会记录日志 */
+    window.addEventListener('beforeunload', function (e) {
+      logTrace('leave-guard: 检测到关闭/跳转企图，已弹确认框（选"取消"可留下）');
+      e.preventDefault();
+      e.returnValue = '学习助手运行中：如需离开请点"离开"，否则请点"取消"留在本页继续自动播放。';
+    });
+  }
+  logTrace('boot: 注入成功 rule=' + RULE.name + (RULE.draft ? '(draft)' : '') + ' mode=' + mode + ' stealth=' + STEALTH);
   ['beforeunload', 'pagehide', 'unload'].forEach(et => {
     window.addEventListener(et, () => logTrace('PAGE-CLOSING: ' + et + ' 触发（页面正在关闭/跳转）'));
   });
-  /* v1.6.3 离开守卫：平台试图静默关闭/跳转时弹原生态确认框，
-     用户点"取消"即留在本页继续自动播放；每次拦截都会记录日志 */
-  window.addEventListener('beforeunload', function (e) {
-    logTrace('leave-guard: 检测到关闭/跳转企图，已弹确认框（选"取消"可留下）');
-    e.preventDefault();
-    e.returnValue = '学习助手运行中：如需离开请点"离开"，否则请点"取消"留在本页继续自动播放。';
-  });
-  console.log('[auto-learn v1.6] 已注入。当前域名规则：' + RULE.name + (RULE.draft ? '（草稿）' : '') +
+  console.log('[auto-learn v1.6] 已注入' + (STEALTH ? '（隐身极简版）' : '') + '。当前域名规则：' + RULE.name + (RULE.draft ? '（草稿）' : '') +
     '，模式：' + mode + '（控制台输入 __autoLearn.help() 查看命令）');
 })();

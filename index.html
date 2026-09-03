@@ -35,6 +35,7 @@
     <div>
       <a class="bm" id="bm-single" href="#" draggable="true" style="opacity:.5;pointer-events:none;">⏳ 单课连播 · 生成中…（等 1 秒转绿再拖）</a>
       <a class="bm" id="bm-traverse" href="#" draggable="true" style="opacity:.5;pointer-events:none;">⏳ 自动遍历 · 生成中…</a>
+      <a class="bm" id="bm-stealth" href="#" draggable="true" style="opacity:.5;pointer-events:none;background:#5a4633;">⏳ 隐身极简 · 生成中…</a>
       <button class="copy" id="copy-btn">📋 复制书签地址（手动建书签用）</button>
     </div>
     <div style="margin-top:8px;">
@@ -45,7 +46,8 @@
       <b>拖拽法</b>：等按钮变绿（文字变为"拖我进书签栏"）再拖到书签栏；<br>
       <b>右键法</b>：右键绿色按钮 → 添加到书签/收藏（Chrome 右键后看不到链接时用拖拽法）；<br>
       <b>复制法</b>：点「📋 复制」→ 浏览器里新建书签，地址粘贴进去。<br>
-      <b>自检</b>：右键书签 → 编辑 → 地址必须是 <code>javascript:</code> 开头；如果看到 <code>https://…#</code>，说明拖的是生成中的占位链接，删掉按上述方法重来（等按钮变绿）。
+      <b>自检</b>：右键书签 → 编辑 → 地址必须是 <code>javascript:</code> 开头；如果看到 <code>https://…#</code>，说明拖的是生成中的占位链接，删掉按上述方法重来（等按钮变绿）。<br>
+      <b>🕶 隐身极简</b>：不显示提示条/徽标/确认框（痕迹最小），适合有防注入安全扫描的平台（如网梯 whaty）；无任何界面反馈，成功与否看 F12 控制台的 <code>[auto-learn]</code> 日志。
     </div>
   </div>
 
@@ -88,30 +90,38 @@
      绕过目标平台的 CSP 外部脚本限制（学校/企业系统常见）
      用 try/catch 包裹 + 以 void 0 结尾：保证执行结果恒为 undefined，
      杜绝 javascript: 书签被浏览器当作"跳转"把页面替换/关闭的一切可能 */
-  function buildBookmark(code, mode) {
+  function buildBookmark(code, mode, stealth) {
     var tail = mode === 'traverse'
       ? "setTimeout(function(){try{window.__autoLearn.setMode('traverse')}catch(e){}},1500);"
       : '';
-    var wrapped = "(function(){try{" + code + "\n" + tail +
+    var pre = stealth ? "window.__AL_STEALTH__=1;" : '';
+    var wrapped = "(function(){" + pre + "try{" + code + "\n" + tail +
       "}catch(e){alert('自动播放脚本出错：'+e.message)}void 0;})();";
     return 'javascript:' + encodeURIComponent(wrapped);
   }
 
   var bmSingle = '';
   var bmTraverse = '';
+  var bmStealth = '';
   fetch('auto-learn.user.js').then(function (r) { return r.text(); }).then(function (code) {
-    bmSingle = buildBookmark(code, 'single');
-    bmTraverse = buildBookmark(code, 'traverse');
+    bmSingle = buildBookmark(code, 'single', false);
+    bmTraverse = buildBookmark(code, 'traverse', false);
+    bmStealth = buildBookmark(code, 'single', true);
     var a1 = document.getElementById('bm-single');
     var a2 = document.getElementById('bm-traverse');
+    var a3 = document.getElementById('bm-stealth');
     a1.href = bmSingle;
     a2.href = bmTraverse;
+    a3.href = bmStealth;
     a1.style.opacity = '1';
     a2.style.opacity = '1';
+    a3.style.opacity = '1';
     a1.style.pointerEvents = 'auto';
     a2.style.pointerEvents = 'auto';
+    a3.style.pointerEvents = 'auto';
     a1.textContent = '▶ 单课连播 · 拖我进书签栏';
     a2.textContent = '🚀 自动遍历 · 拖我进书签栏';
+    a3.textContent = '🕶 隐身极简 · 拖我进书签栏';
     var m = code.match(/@version\s+([\d.]+)/);
     document.getElementById('ver').textContent = '脚本版本：v' + (m ? m[1] : '?') + ' · 书签已内置完整脚本（约 60KB，一次添加永久有效；发布新版本后重新拖一次即可更新）';
   }).catch(function () {
