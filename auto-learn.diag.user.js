@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习系统自动播放（诊断版）
 // @namespace    local.auto-learn
-// @version      1.7.1
+// @version      1.7.2
 // @description  诊断版（TM 用）：内置日志模式，页面被平台关闭后重开页面可 __autoLearn.trace() 读取原因
 // @author       you
 // @match        *://*/*
@@ -71,6 +71,17 @@
    * ============================================================ */
   let __AL_CONFIG_STEALTH = false;
   let __AL_CONFIG_DIAG = true;
+
+  /* 诊断模式"绝对脚印"：即使被防重入守卫拦下，也先留一条记录（证明脚本确实被执行过） */
+  if (!!(window.__AL_DIAG__ || __AL_CONFIG_DIAG)) {
+    try {
+      let _a = [];
+      try { _a = JSON.parse(localStorage.getItem('autoLearn.trace.' + location.hostname) || '[]'); } catch (e) {}
+      _a.push(new Date().toLocaleTimeString() + ' [script-eval] 诊断版被执行（guard=' + !!window.__AUTO_LEARN__ + ' v=1.7.2）');
+      if (_a.length > 200) _a = _a.slice(-200);
+      localStorage.setItem('autoLearn.trace.' + location.hostname, JSON.stringify(_a));
+    } catch (e) {}
+  }
 
   if (window.__AUTO_LEARN__) return;
   try {
@@ -1527,6 +1538,6 @@
   ['beforeunload', 'pagehide', 'unload'].forEach(et => {
     window.addEventListener(et, () => logTrace('PAGE-CLOSING: ' + et + ' 触发（页面正在关闭/跳转）'));
   });
-  console.log('[auto-learn v1.6] 已注入' + (STEALTH ? '（隐身极简版）' : '') + '。当前域名规则：' + RULE.name + (RULE.draft ? '（草稿）' : '') +
+  console.log('[auto-learn v1.7.2] 已注入' + (STEALTH ? '（隐身）' : '') + ' diag=' + DIAG + '。当前域名规则：' + RULE.name + (RULE.draft ? '（草稿）' : '') +
     '，模式：' + mode + '（控制台输入 __autoLearn.help() 查看命令）');
 })();
