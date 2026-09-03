@@ -33,8 +33,8 @@
   <div class="card">
     <h2>第 1 步 · 把播放器放入浏览器（只需一次）</h2>
     <div>
-      <a class="bm" id="bm-single" href="#" draggable="true">▶ 单课连播 · 拖我进书签栏</a>
-      <a class="bm" id="bm-traverse" href="#" draggable="true">🚀 自动遍历 · 拖我进书签栏</a>
+      <a class="bm" id="bm-single" href="#" draggable="true" style="opacity:.5;pointer-events:none;">⏳ 单课连播 · 生成中…（等 1 秒转绿再拖）</a>
+      <a class="bm" id="bm-traverse" href="#" draggable="true" style="opacity:.5;pointer-events:none;">⏳ 自动遍历 · 生成中…</a>
       <button class="copy" id="copy-btn">📋 复制书签地址（手动建书签用）</button>
     </div>
     <div style="margin-top:8px;">
@@ -42,9 +42,10 @@
     </div>
     <div class="hint"><b>排查小贴士</b>：如果点 ▶ 后页面被异常关闭，回到该页面再点 🔍 诊断，把弹出的日志发我，就能看到关闭前脚本最后在干什么。</div>
     <div class="hint">
-      <b>拖拽法</b>：把上面绿色按钮直接拖到浏览器书签栏（顶部收藏夹栏）；<br>
+      <b>拖拽法</b>：等按钮变绿（文字变为"拖我进书签栏"）再拖到书签栏；<br>
       <b>右键法</b>：右键绿色按钮 → 添加到书签/收藏（Chrome 右键后看不到链接时用拖拽法）；<br>
-      <b>复制法</b>：点「📋 复制」→ 浏览器里新建书签，地址粘贴进去。
+      <b>复制法</b>：点「📋 复制」→ 浏览器里新建书签，地址粘贴进去。<br>
+      <b>自检</b>：右键书签 → 编辑 → 地址必须是 <code>javascript:</code> 开头；如果看到 <code>https://…#</code>，说明拖的是生成中的占位链接，删掉按上述方法重来（等按钮变绿）。
     </div>
   </div>
 
@@ -101,8 +102,16 @@
   fetch('auto-learn.user.js').then(function (r) { return r.text(); }).then(function (code) {
     bmSingle = buildBookmark(code, 'single');
     bmTraverse = buildBookmark(code, 'traverse');
-    document.getElementById('bm-single').href = bmSingle;
-    document.getElementById('bm-traverse').href = bmTraverse;
+    var a1 = document.getElementById('bm-single');
+    var a2 = document.getElementById('bm-traverse');
+    a1.href = bmSingle;
+    a2.href = bmTraverse;
+    a1.style.opacity = '1';
+    a2.style.opacity = '1';
+    a1.style.pointerEvents = 'auto';
+    a2.style.pointerEvents = 'auto';
+    a1.textContent = '▶ 单课连播 · 拖我进书签栏';
+    a2.textContent = '🚀 自动遍历 · 拖我进书签栏';
     var m = code.match(/@version\s+([\d.]+)/);
     document.getElementById('ver').textContent = '脚本版本：v' + (m ? m[1] : '?') + ' · 书签已内置完整脚本（约 60KB，一次添加永久有效；发布新版本后重新拖一次即可更新）';
   }).catch(function () {
