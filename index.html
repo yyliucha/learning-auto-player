@@ -96,9 +96,13 @@
     var tail = mode === 'traverse'
       ? "setTimeout(function(){try{window.__autoLearn.setMode('traverse')}catch(e){}},1500);"
       : '';
-    var pre = flag
-      ? "try{Object.defineProperty(window,'__AL_" + flag + "__',{value:1,configurable:true});}catch(e){window.__AL_STEALTH__=1;}"
-      : '';
+    var pre = '';
+    if (flag === 'DIAG') {
+      pre = "alert('🔬 诊断版已启动：正在记录毫秒级日志…\n页面被关闭后，重开此页读取即可');" +
+        "try{Object.defineProperty(window,'__AL_DIAG__',{value:1,configurable:true});}catch(e){window.__AL_DIAG__=1;}";
+    } else if (flag === 'STEALTH') {
+      pre = "try{Object.defineProperty(window,'__AL_STEALTH__',{value:1,configurable:true});}catch(e){window.__AL_STEALTH__=1;}";
+    }
     var wrapped = "(function(){" + pre + "try{" + code + "\n" + tail +
       "}catch(e){alert('自动播放脚本出错：'+e.message)}void 0;})();";
     return 'javascript:' + encodeURIComponent(wrapped);
