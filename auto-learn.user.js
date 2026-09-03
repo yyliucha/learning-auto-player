@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习系统自动播放（规则驱动版）
 // @namespace    local.auto-learn
-// @version      1.6.9
+// @version      1.7.0
 // @description  防暂停 + 自动续播 + 自动切下一集 + 多门课遍历 + 录制向导 + 全自动建档 + 学习记录
 // @author       you
 // @match        *://*/*
@@ -15,6 +15,8 @@
  * ------------------------------------------------------------
  * 安装：
  *   方式 A（推荐）：Tampermonkey 新建脚本，粘贴本文件内容保存。
+ *      防注入严格的平台（页面被关闭）→ 把脚本开头配置区 __AL_CONFIG_STEALTH 改成 true 保存
+ *      要取证 → __AL_CONFIG_DIAG 改成 true 保存（页面被关后，重开页面控制台执行 __autoLearn.trace()）
  *   方式 B（临时）：F12 → Console → 粘贴全部内容 → 回车。
  *   两种方式行为一致，规则/模式/学习记录都存 localStorage。
  *
@@ -60,12 +62,22 @@
 (function () {
   'use strict';
 
+  /* ============================================================
+   * 配置区（Tampermonkey 用户在这里改）：
+   *   __AL_CONFIG_STEALTH = true  → 隐身极简模式：无提示条/徽标/确认框、
+   *     零存储写入（痕迹最小，适合平台防注入扫描严格的网站，如网梯 whaty）
+   *   __AL_CONFIG_DIAG    = true  → 诊断模式：毫秒级本地日志
+   *     （页面被平台关掉后，重开页面在控制台执行 __autoLearn.trace() 找回）
+   * ============================================================ */
+  let __AL_CONFIG_STEALTH = false;
+  let __AL_CONFIG_DIAG = false;
+
   if (window.__AUTO_LEARN__) return;
   try {
     Object.defineProperty(window, '__AUTO_LEARN__', { value: true, writable: true, configurable: true });
   } catch (e) { window.__AUTO_LEARN__ = true; }
-  const STEALTH = !!window.__AL_STEALTH__;   // 隐身极简模式：无提示条/徽标/离开守卫/伪活动（最小痕迹）
-  const DIAG = !!window.__AL_DIAG__;         // 诊断模式：毫秒级本地日志（存 localStorage，页面被关也能取回）
+  const STEALTH = !!(window.__AL_STEALTH__ || __AL_CONFIG_STEALTH);   // 隐身极简模式：无提示条/徽标/离开守卫/伪活动（最小痕迹）
+  const DIAG = !!(window.__AL_DIAG__ || __AL_CONFIG_DIAG);            // 诊断模式：毫秒级本地日志（存 localStorage，页面被关也能取回）
 
   /* ---------------- 内置规则库 ---------------- */
   /* 示例规则（example.com）仅供参考：改成你自己的域名，或直接用录制向导 /
