@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习系统自动播放（规则驱动版）
 // @namespace    local.auto-learn
-// @version      1.6.3
+// @version      1.6.4
 // @description  防暂停 + 自动续播 + 自动切下一集 + 多门课遍历 + 录制向导 + 全自动建档 + 学习记录
 // @author       you
 // @match        *://*/*
@@ -372,6 +372,7 @@
   let lastAction = '启动';
   let badge = null;
   let flowRunning = false;
+  let endedFlowAt = 0;      // 上次因"视频播完"触发切换流程的时间（防重复触发）
   let lastTime = -1, stallCount = 0, resumeFails = 0;
 
   /* ---------------- 课程遍历状态 ---------------- */
@@ -422,14 +423,32 @@
   };
 
   /* 3. 小工具（全部由规则驱动） */
-  function findVideo() {
-    let all = [];
+
+  /* 遍历本页 + 同源 iframe 的文档（跨域 iframe 打不开，自动跳过） */
+  function eachDoc(cb) {
+    cb(document);
     try {
-      all = Array.from(document.querySelectorAll(RULE.videoPage.videoSelector))
-        .filter(el => el.tagName === 'VIDEO');
-    } catch (e) {
-      all = Array.from(document.querySelectorAll('video'));
-    }
+      for (const f of document.querySelectorAll('iframe')) {
+        try {
+          const d = f.contentDocument;
+          if (d && d !== document && d.body) cb(d);
+        } catch (e) {}
+      }
+    } catch (e) {}
+  }
+
+  function findVideo() {
+    const sel = RULE.videoPage.videoSelector;
+    const all = [];
+    eachDoc(d => {
+      let els = [];
+      try {
+        els = Array.from(d.querySelectorAll(sel)).filter(el => el.tagName === 'VIDEO');
+      } catch (e) {
+        els = Array.from(d.querySelectorAll('video'));
+      }
+      for (const v of els) all.push(v);
+    });
     if (!all.length) return null;
     // 页面可能残留多个 <video>，优先返回"正在播/没播完"的那个
     for (const v of all) if (!v.ended && !v.paused && v.currentTime > 0) return v;
@@ -770,7 +789,16 @@
             : '播放中 ' + fmt(v.currentTime) + ' / ' + fmt(v.duration);
         }
       } else if (v) {
-        lastAction = '本集已结束，等待切换…';
+        // 视频处于 ended 状态：iframe 里的视频"播完事件"外层监听不到，靠心跳兜底触发切换
+        if (Date.now() - endedFlowAt > 30000) {
+          endedFlowAt = Date.now();
+          lastAction = '本集已结束，处理收尾…';
+          logTrace('tick: 检测到视频播完(含 iframe)，触发切换流程');
+          updateBadge();
+          startNextFlow();
+        } else {
+          lastAction = '本集已结束，等待切换…';
+        }
       } else {
         lastAction = '页面里没有视频';
       }
