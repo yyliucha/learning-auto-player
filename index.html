@@ -80,12 +80,16 @@
   var origin = location.origin;
 
   /* 全量内嵌式书签：把 auto-learn.user.js 完整编入书签地址，零外部加载，
-     绕过目标平台的 CSP 外部脚本限制（学校/企业系统常见） */
+     绕过目标平台的 CSP 外部脚本限制（学校/企业系统常见）
+     用 try/catch 包裹 + 以 void 0 结尾：保证执行结果恒为 undefined，
+     杜绝 javascript: 书签被浏览器当作"跳转"把页面替换/关闭的一切可能 */
   function buildBookmark(code, mode) {
     var tail = mode === 'traverse'
-      ? ";setTimeout(function(){try{window.__autoLearn.setMode('traverse')}catch(e){}},1500);"
+      ? "setTimeout(function(){try{window.__autoLearn.setMode('traverse')}catch(e){}},1500);"
       : '';
-    return 'javascript:' + encodeURIComponent(code + '\n' + tail);
+    var wrapped = "(function(){try{" + code + "\n" + tail +
+      "}catch(e){alert('自动播放脚本出错：'+e.message)}void 0;})();";
+    return 'javascript:' + encodeURIComponent(wrapped);
   }
 
   var bmSingle = '';
