@@ -79,26 +79,33 @@
   'use strict';
   var origin = location.origin;
 
-  /* 书签代码：在目标页面注入同源的 auto-learn.user.js，可选自动遍历模式 */
-  function makeBookmark(mode) {
-    var s = "javascript:(function(){var s=document.createElement('script');" +
-      "s.src='" + origin + "/auto-learn.user.js';" +
-      "s.onerror=function(){alert('脚本加载失败：请确认网络可访问 " + origin + "（本站为同源发放，需联网加载最新版）');};" +
-      "document.body.appendChild(s);" +
-      "var t=setInterval(function(){if(window.__autoLearn){" +
-      (mode === 'traverse' ? "window.__autoLearn.setMode('traverse');" : '') +
-      "clearInterval(t);}},200);})();";
-    return s;
+  /* 全量内嵌式书签：把 auto-learn.user.js 完整编入书签地址，零外部加载，
+     绕过目标平台的 CSP 外部脚本限制（学校/企业系统常见） */
+  function buildBookmark(code, mode) {
+    var tail = mode === 'traverse'
+      ? ";setTimeout(function(){try{window.__autoLearn.setMode('traverse')}catch(e){}},1500);"
+      : '';
+    return 'javascript:' + encodeURIComponent(code + '\n' + tail);
   }
 
-  var bmSingle = makeBookmark('single');
-  var bmTraverse = makeBookmark('traverse');
-  document.getElementById('bm-single').href = bmSingle;
-  document.getElementById('bm-traverse').href = bmTraverse;
+  var bmSingle = '';
+  var bmTraverse = '';
+  fetch('auto-learn.user.js').then(function (r) { return r.text(); }).then(function (code) {
+    bmSingle = buildBookmark(code, 'single');
+    bmTraverse = buildBookmark(code, 'traverse');
+    document.getElementById('bm-single').href = bmSingle;
+    document.getElementById('bm-traverse').href = bmTraverse;
+    var m = code.match(/@version\s+([\d.]+)/);
+    document.getElementById('ver').textContent = '脚本版本：v' + (m ? m[1] : '?') + ' · 书签已内置完整脚本（约 60KB，一次添加永久有效；发布新版本后重新拖一次即可更新）';
+  }).catch(function () {
+    document.getElementById('ver').textContent = '脚本加载失败：请刷新页面重试（书签需在线生成一次）';
+  });
 
   document.getElementById('copy-btn').addEventListener('click', function () {
-    var text = '▶ 教科书链接：\n' + bmSingle + '\n\n🚀 自动遍历链接：\n' + bmTraverse;
-    var done = function () { alert('书签地址已复制！\n新建书签 → 名称随意 → 地址粘贴 → 保存'); };
+    if (!bmSingle) { alert('书签还没生成好，请稍等 1 秒再试'); return; }
+    var text = '▶ 单课连播书签（拖到书签栏，或右键保存为书签）：\n' + bmSingle +
+      '\n\n🚀 自动遍历书签：\n' + bmTraverse;
+    var done = function () { alert('书签地址已复制！（内容约 60KB，属正常）\n新建书签 → 地址粘贴 → 保存'); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
     } else {
@@ -113,14 +120,6 @@
     try { document.execCommand('copy'); } catch (e) {}
     document.body.removeChild(ta);
   }
-
-  /* 读取脚本最新版本号（同源读取，展示用） */
-  fetch('auto-learn.user.js').then(function (r) { return r.text(); }).then(function (src) {
-    var m = src.match(/@version\s+([\d.]+)/);
-    document.getElementById('ver').textContent = '脚本版本：v' + (m ? m[1] : '?') + ' · 本站加载的是最新版';
-  }).catch(function () {
-    document.getElementById('ver').textContent = '脚本版本：未知（离线/跨域名部署，不影响书签功能）';
-  });
 })();
 </script>
 </body>
